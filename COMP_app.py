@@ -146,9 +146,9 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
                      facecolor='#90EE90', alpha=0.3, label='Safe Zone (Hr)') # Light Green
 
     # Red Zone (Above Surge HR)
-    ax1.fill_between(qr2_for_shading, surge_hr_for_shading, max_hr,
-                     where=(max_hr >= surge_hr_for_shading),
-                     facecolor='#FFCCCB', alpha=0.3, label='Surge Zone (Hr)') # Light Red
+   # ax1.fill_between(qr2_for_shading, surge_hr_for_shading, max_hr,
+                    # where=(max_hr >= surge_hr_for_shading),
+                   #  facecolor='#FFCCCB', alpha=0.3, label='Surge Zone (Hr)') # Light Red
     # --------------------------------------------------------------------------
 
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
@@ -195,9 +195,9 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
                      facecolor='#90EE90', alpha=0.3, label='Safe Zone (Pwr)') # Light Green
 
     # Red Zone (Above Rated Power)
-    ax2.fill_between(qr2_for_shading, rated_power_line_values, max_power,
-                     where=(max_power >= rated_power_line_values),
-                     facecolor='#FFCCCB', alpha=0.3, label='Overload Zone (Pwr)') # Light Red
+  #  ax2.fill_between(qr2_for_shading, rated_power_line_values, max_power,
+                  #   where=(max_power >= rated_power_line_values),
+                   #  facecolor='#FFCCCB', alpha=0.3, label='Overload Zone (Pwr)') # Light Red
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
