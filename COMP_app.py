@@ -1,3 +1,8 @@
+# --- 1. INSTALLATION & SETUP ---
+# Install necessary libraries including pyngrok for the tunnel
+!pip install pandas matplotlib numpy streamlit xlsxwriter pyngrok -q
+
+# Import all modules
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -5,28 +10,37 @@ import os
 import xlsxwriter
 import streamlit as st
 from io import BytesIO
+from pyngrok import ngrok
+import subprocess
+import time
+import sys
+from matplotlib.patches import Patch # Import Patch here to avoid internal errors
 
+# --- Ngrok Authentication Setup ---
+# *** IMPORTANT: REPLACE "YOUR_AUTH_TOKEN" with your actual ngrok token ***
+# You can get your token from: https://dashboard.ngrok.com/get-started/your-authtoken
+NGROK_TOKEN = "YOUR_AUTH_TOKEN"
+ngrok.set_auth_token(NGROK_TOKEN)
 # ----------------------------------------------------------------------
 # GLOBAL CONFIGURATION
 # ----------------------------------------------------------------------
 TEMP_DIR = 'temp_plots'
 
-
 # ----------------------------------------------------------------------
-# PLOTTING FUNCTIONS (PLOT 1 REMAINS SAME)
+# 2. PLOTTING FUNCTIONS
 # ----------------------------------------------------------------------
 
 # PLOT 1: Qr2 vs. Discharge Pressure (Grouped by Suction Temperature)
 def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     """
     Generates the plot of Qr2 vs. Discharge Pressure, grouped by Suction Temperature.
-    MODIFIED: Notation for Reduced Flow is changed to Qr^2 in the X-axis label.
+    FIXED: Using raw strings (r'') for LaTeX to fix SyntaxWarnings.
     """
     fig, ax1 = plt.subplots(figsize=(10, 6))
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr^2 (Reduced Flow) ---
     ax1.set_xlabel(r'Reduced Flow ($\mathbf{Qr^2}$)', fontsize=14)
-    ax1.set_ylabel('Discharge Pressure ($\mathbf{barg}$)', fontsize=14)
+    ax1.set_ylabel(r'Discharge Pressure ($\mathbf{barg}$)', fontsize=14) # FIXED SyntaxWarning
     ax1.grid(True, linestyle='--', alpha=0.7)
 
     grouped = df.groupby('Suction Temperature Deg C')
@@ -43,46 +57,37 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
             label=f'{temp}°C'
         )
     
-    # -----------------------------------------------------------
     # --- B. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow (FIX) ---
-    # -----------------------------------------------------------
     ax3 = ax1.twiny()
 
-    # 1. Force the plotting to determine the automatic major ticks
     fig.canvas.draw()
     major_qr2_ticks = ax1.get_xticks()
 
-    # 2. Get the full Qr2 range and corresponding Actual Gas Flow values
     qr2_values = df_sorted['Qr2'].values
     flow_values = df_sorted['Actual Gas Flow (Am3/hr)'].values
     
-    # 3. Interpolate the Actual Gas Flow values for each major Qr2 tick position
     flow_labels_amch = np.interp(
         major_qr2_ticks,
         qr2_values,
         flow_values
     ).astype(int)
 
-    # 4. Apply the new ticks and labels
     ax3.set_xticks(major_qr2_ticks)
     ax3.set_xticklabels(flow_labels_amch)
 
-    flow_col = 'Actual Gas Flow (Am3/hr)' # For label consistency
-    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange')
+    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange') # FIXED SyntaxWarning
     ax3.tick_params(axis='x', labelcolor='darkorange', labelsize=10)
-    ax3.set_xlim(ax1.get_xlim()) # Ensure the top axis limits match the bottom axis
+    ax3.set_xlim(ax1.get_xlim()) 
 
     ax1.set_title(f'Process Curve - Suction Pressure: {pressure_value} barg', fontsize=18)
     ax1.legend(title='Suction Temperature', loc='upper right')
     fig.tight_layout()
     
-    # Save plot to an in-memory buffer
     plot_buffer = BytesIO()
     plt.savefig(plot_buffer, format='png', dpi=300, bbox_inches='tight')
-    plt.close(fig) # Close figure to free memory
+    plt.close(fig)
     plot_buffer.seek(0)
     
-    # Return a descriptive filename and the buffer
     plot_filename = f'Process_Curve_P_{pressure_value}.png'
     return plot_filename, plot_buffer
 
@@ -90,15 +95,15 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
 # PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR SHADING
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
-    Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
-    and Actual Gas Flow (Secondary X).
-    MODIFIED: Added green/red shading zones for Surge HR and Rated Power.
+    Generates the final superimposed plot.
+    MODIFIED: Only green shading (safe zones) below surge line and rated power line.
+    FIXED: Using raw strings (r'') for LaTeX to fix SyntaxWarnings.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr^2 (Reduced Flow) ---
-    ax1.set_xlabel(r'Reduced Flow Rate ($\mathbf{Qr^2}$)', fontsize=14)
-    ax1.set_ylabel(r'Reduced Head ($\mathbf{Hr}$)', fontsize=14, color='b')
+    ax1.set_xlabel(r'Reduced Flow Rate ($\mathbf{Qr^2}$)', fontsize=14) # FIXED SyntaxWarning
+    ax1.set_ylabel(r'Reduced Head ($\mathbf{Hr}$)', fontsize=14, color='b') # FIXED SyntaxWarning
     ax1.tick_params(axis='y', labelcolor='b')
     ax1.grid(True, linestyle='--', alpha=0.6)
 
@@ -110,7 +115,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         linestyle='-',
         color='red',
         linewidth=3.0,
-        label=r'Surge Line ($\mathbf{Surge~Hr}$)'
+        label=r'Surge Line ($\mathbf{Surge~Hr}$)' # FIXED SyntaxWarning
     )
 
     # Group by Temperature
@@ -135,25 +140,25 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # --------------------------------------------------------------------------
     # --- ADD SHADING FOR SURGE LINE (Qr^2 vs Hr) ---
+    # Only green zone below the surge line
     # --------------------------------------------------------------------------
-    min_hr, max_hr = ax1.get_ylim() # Get current Y-limits to define red zone top
     qr2_for_shading = df_sorted['Qr2']
     surge_hr_for_shading = df_sorted['Surge HR']
 
+    ax1.relim()
+    ax1.autoscale_view()
+    min_hr, _ = ax1.get_ylim() # Only need min_hr for fill_between below the line
+
     # Green Zone (Below Surge HR)
     ax1.fill_between(qr2_for_shading, surge_hr_for_shading, min_hr, 
-                     where=(surge_hr_for_shading >= min_hr),
-                     facecolor='#90EE90', alpha=0.3, label='Safe Zone (Hr)') # Light Green
-
-    # Red Zone (Above Surge HR)
-    ax1.fill_between(qr2_for_shading, surge_hr_for_shading, max_hr,
-                     where=(max_hr >= surge_hr_for_shading),
-                     facecolor='#FFCCCB', alpha=0.3, label='Surge Zone (Hr)') # Light Red
+                     where=(surge_hr_for_shading >= min_hr), # Ensure it's not below the plot's min Y
+                     facecolor='#90EE90', alpha=0.3, label='Hr Safe Zone (Below Surge)') # Light Green
+    # Removed: Red Zone (Above Surge HR)
     # --------------------------------------------------------------------------
 
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
     ax2 = ax1.twinx()
-    ax2.set_ylabel('Power (kW)', fontsize=14, color='g')
+    ax2.set_ylabel(r'Power (kW)', fontsize=14, color='g') # FIXED SyntaxWarning
     ax2.tick_params(axis='y', labelcolor='g')
 
     power_handles = []
@@ -185,19 +190,18 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # --------------------------------------------------------------------------
     # --- ADD SHADING FOR RATED POWER LINE (Qr^2 vs Power) ---
+    # Only green zone below the rated power line
     # --------------------------------------------------------------------------
-    min_power, max_power = ax2.get_ylim() # Get current Y-limits for power axis
+    ax2.relim()
+    ax2.autoscale_view()
+    min_power, _ = ax2.get_ylim() # Only need min_power for fill_between below the line
     rated_power_line_values = [rated_power] * len(df_sorted)
 
     # Green Zone (Below Rated Power)
     ax2.fill_between(qr2_for_shading, rated_power_line_values, min_power,
-                     where=(rated_power_line_values >= min_power),
-                     facecolor='#90EE90', alpha=0.3, label='Safe Zone (Pwr)') # Light Green
-
-    # Red Zone (Above Rated Power)
-    ax2.fill_between(qr2_for_shading, rated_power_line_values, max_power,
-                     where=(max_power >= rated_power_line_values),
-                     facecolor='#FFCCCB', alpha=0.3, label='Overload Zone (Pwr)') # Light Red
+                     where=(rated_power_line_values >= min_power), # Ensure it's not below the plot's min Y
+                     facecolor='#90EE90', alpha=0.3, label='Pwr Safe Zone (Below Rated)') # Light Green
+    # Removed: Red Zone (Above Rated Power)
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
@@ -218,37 +222,28 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax3.set_xticks(major_qr2_ticks)
     ax3.set_xticklabels(flow_labels_amch)
 
-    flow_col = 'Actual Gas Flow (Am3/hr)' 
-    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange')
+    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange') # FIXED SyntaxWarning
     ax3.tick_params(axis='x', labelcolor='darkorange', labelsize=10)
     ax3.set_xlim(ax1.get_xlim())
 
     # --- Legend Construction ---
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
-    # IMPORTANT: Include the fill_between legends here.
-    # We need to collect handles from all axes and the fill_between calls.
-    # Create proxy artists for the fill_between legends if they don't appear automatically
-    from matplotlib.patches import Patch
-    surge_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Hr Safe Zone')
-    surge_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Hr Surge Zone')
-    power_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Pwr Safe Zone')
-    power_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Pwr Overload Zone')
+    # Create proxy artists for the fill_between legends
+    # Only create patches for the zones that actually exist (green ones)
+    surge_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Hr Safe Zone (Below Surge)')
+    power_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Pwr Safe Zone (Below Rated)')
 
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
     power_legend_handles = [rated_power_line] + power_handles
 
-    all_handles = hr_legend_handles + power_legend_handles + [surge_safe_patch, surge_red_patch, power_safe_patch, power_red_patch]
-    all_labels = [h.get_label() for h in hr_legend_handles] + \
-                 [h.get_label() for h in power_legend_handles] + \
-                 [surge_safe_patch.get_label(), surge_red_patch.get_label(), 
-                  power_safe_patch.get_label(), power_red_patch.get_label()]
+    # Only include the safe zone patches in the legend
+    all_handles = hr_legend_handles + power_legend_handles + [surge_safe_patch, power_safe_patch]
+    all_labels = [h.get_label() for h in all_handles]
 
-
-    # Use bbox_to_anchor for fine positioning
     ax1.legend(all_handles, all_labels,
-               title='Curves & Zones (Hr Left, Pwr Right)',
+               title='Curves & Zones',
                loc='upper left',
                bbox_to_anchor=(1.05, 1.0),
                ncol=1,
@@ -256,24 +251,21 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     fig.tight_layout()
 
-    # Save plot to an in-memory buffer
     plot_buffer = BytesIO()
     plt.savefig(plot_buffer, format='png', dpi=300, bbox_inches='tight')
     plt.close(fig)
     plot_buffer.seek(0)
     
-    # Return a descriptive filename and the buffer
     plot_filename = f'Performance_Map_P_{pressure_value}.png'
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT
+# 3. STREAMLIT MAIN EXECUTION SCRIPT
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
     """
-    Manages the Streamlit workflow: file upload, data analysis, plotting,
-    and generating the output Excel file with embedded plots.
+    Manages the Streamlit workflow.
     """
     st.set_page_config(layout="wide", page_title="Compressor Analysis Tool")
     st.title("🗜️ Compressor Performance Analysis and Reporting")
@@ -284,7 +276,7 @@ def execute_plotting_and_excel_embedding():
     rated_power = st.number_input(
         "Enter Compressor Rated Power (kW):",
         min_value=1,
-        value=4481, # Default value from the original code
+        value=4481,
         step=10,
         help="This value defines the horizontal 'Rated Power' line on the Performance Map."
     )
@@ -305,16 +297,13 @@ def execute_plotting_and_excel_embedding():
     
     # --- Data Reading and Validation ---
     try:
-        # Read the uploaded Excel file from the Streamlit buffer
-        uploaded_file.seek(0) # Ensure pointer is at the start
+        uploaded_file.seek(0)
         df = pd.read_excel(uploaded_file)
     except Exception as e:
-        st.error(f"❌ Error reading Excel file. Ensure it's a valid .xlsx file. Error: {e}")
-        st.warning("If you see a dependency error (like 'openpyxl'), make sure it's listed in your requirements.txt.")
+        st.error(f"❌ Error reading Excel file. Error: {e}")
         return
 
     # Data Cleaning and Validation
-    # NOTE: 'Actual Gas Flow (AMCH)' must be present in the original Excel file!
     df.rename(columns={'Actual Gas Flow (AMCH)': 'Actual Gas Flow (Am3/hr)'}, inplace=True)
 
     required_columns = [
@@ -325,8 +314,7 @@ def execute_plotting_and_excel_embedding():
     missing_columns = [col for col in required_columns if col not in df.columns]
 
     if missing_columns:
-        st.error(f"❌ Error: Missing required columns in the uploaded data: {missing_columns}")
-        st.code(f"Required columns: {required_columns}", language="text")
+        st.error(f"❌ Error: Missing required columns: {missing_columns}")
         return
 
     # Analysis
@@ -341,36 +329,30 @@ def execute_plotting_and_excel_embedding():
     try:
         with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
             
-            # 1. Write the Raw Data
             df.to_excel(writer, sheet_name='Raw Data Input', index=False)
-            
             workbook = writer.book
 
-            # Loop Through Each Suction Pressure and Generate Plots
             plot_progress = st.progress(0, text="Generating plots...")
             
             for i, pressure in enumerate(unique_pressures):
                 df_pressure = df[df['Suction Pressure barg'] == pressure].copy()
                 df_sorted_pressure = df_pressure.sort_values(by='Qr2').reset_index(drop=True)
                 
-                # Plot Set 1: Process Curve
                 process_name, process_buffer = plot_qr2_vs_discharge_pressure_by_temp(df_pressure, df_sorted_pressure, pressure)
                 all_plot_data.append((process_name, process_buffer))
                 
-                # Plot Set 2: Performance Map
                 performance_name, performance_buffer = plot_superimposed_map_triple_axis(df_pressure, df_sorted_pressure, rated_power, pressure)
                 all_plot_data.append((performance_name, performance_buffer))
                 
-                # Update progress
                 plot_progress.progress((i + 1) / len(unique_pressures), text=f"Generated plots for P: {pressure} barg")
 
-            plot_progress.empty() # Clear the progress bar after completion
+            plot_progress.empty()
             st.success("All plots generated successfully!")
             
             # 2. Embed all plots
             for plot_name, plot_buffer in all_plot_data:
-                worksheet = workbook.add_worksheet(plot_name.replace('.png', '').replace('Process_', 'Curve_')) # Max 31 chars
-                # Insert the plot from the in-memory buffer
+                sheet_name = plot_name.replace('.png', '').replace('Process_', 'Curve_')[:31] 
+                worksheet = workbook.add_worksheet(sheet_name)
                 worksheet.insert_image('A1', plot_name, {
                     'image_data': plot_buffer, 
                     'x_scale': 0.7, 
@@ -394,7 +376,58 @@ def execute_plotting_and_excel_embedding():
     except Exception as e:
         st.error(f"An unexpected error occurred during Excel processing or plotting: {e}")
 
+# ----------------------------------------------------------------------
+# 4. COLAB EXECUTION WRAPPER
+# ----------------------------------------------------------------------
 
+# Create a module/namespace for the main function to be callable by the wrapper
+sys.modules['execute_plotting_and_excel_embedding'] = sys.modules[__name__]
+
+def save_app_to_file():
+    # Write the execution logic to a file that the subprocess will run
+    with open('streamlit_app.py', 'w') as f:
+        f.write(
+            """
+import execute_plotting_and_excel_embedding
+execute_plotting_and_excel_embedding.execute_plotting_and_excel_embedding()
+            """
+        )
+
+def run_streamlit_in_colab():
+    """Starts the Streamlit app and exposes it via ngrok tunnel."""
+    
+    save_app_to_file()
+    port = 8501
+    
+    ngrok.kill() 
+    
+    try:
+        tunnel = ngrok.connect(port)
+        print(f"\nStreamlit App is ready! Click the public URL below:")
+        print(f"Public URL: {tunnel.public_url}")
+        
+        # Start Streamlit in the background
+        process = subprocess.Popen(['streamlit', 'run', 'streamlit_app.py'])
+        
+        # Keep the cell running (and the tunnel alive) until interruption
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nStopping Streamlit and ngrok tunnel...")
+            process.terminate()
+            ngrok.disconnect(tunnel.public_url)
+            print("Cleanup complete.")
+            
+    except Exception as e:
+        # Catch authentication errors specifically
+        if 'authentication failed' in str(e):
+             print(f"\n❌ CRITICAL ERROR: ngrok Authentication Failed.")
+             print("Please ensure your NGROK_TOKEN variable is set correctly with a valid token.")
+             print("Get your token here: https://dashboard.ngrok.com/get-started/your-authtoken")
+        else:
+             print(f"\nError running ngrok/Streamlit: {e}")
+             
 # --- Execute the Streamlit app ---
 if __name__ == '__main__':
-    execute_plotting_and_excel_embedding()
+    run_streamlit_in_colab()
