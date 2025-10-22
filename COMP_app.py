@@ -22,7 +22,7 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     Generates the plot of Qr2 vs. Discharge Pressure, grouped by Suction Temperature.
     MODIFIED: Secondary X-axis uses interpolated values based on primary X-axis major ticks.
     """
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    fig, ax1 = plt.subplots(figsize=(14, 8))
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr2 (Reduced Flow) ---
     ax1.set_xlabel(r'Reduced Flow ($\mathbf{Q_{r2}}$)', fontsize=14)
