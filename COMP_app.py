@@ -1,6 +1,6 @@
 # --- 1. INSTALLATION & SETUP ---
 # Install necessary libraries including pyngrok for the tunnel
-!pip install pandas matplotlib numpy streamlit xlsxwriter pyngrok -q
+#!pip install pandas matplotlib numpy streamlit xlsxwriter pyngrok -q
 
 # Import all modules
 import pandas as pd
