@@ -93,7 +93,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
     FINAL LOGIC: Operating zone (Green) is strictly where Hr < Surge AND Pwr < Rated. 
-    Non-operating zones (Red) cover all other areas.
+    Non-operating zones (Red) cover all other areas, with Red fully masking Green.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
     qr2_for_shading = df_sorted['Qr2']
@@ -130,46 +130,29 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- SHADING ---
     rated_power_array = np.full_like(qr2_for_shading, rated_power, dtype=float)
 
-    # Get the Surge HR data array for the 'where' condition
-    surge_hr_array = df_sorted['Surge HR'].values
-    
     # --------------------------------------------------------------------------
-    # 1. SHADE OPERATING ZONE (GREEN) - PRECISELY DEFINED
-    # Shade the area BELOW the Rated Power line (on ax2), 
-    # BUT only where the Reduced Head (Surge HR) is GREATER THAN the minimum Y-axis limit (y1_min).
-    
-    # Define the precise Green Zone condition (Hr < Surge Hr is simplified by comparing Surge HR to y1_min)
-    # The green fill needs to stop precisely at the Surge HR line in the y-direction, 
-    # which is difficult with fill_between on a separate axis (ax2).
-    
-    # SOLUTION: Use the Surge HR line as the *upper boundary* of the green fill in ax1, 
-    # but only where the Rated Power condition is met (using a combined where condition).
-    
-    # Since we cannot mix axes, we will revert to the most reliable method:
-    # 1. Fill ALL BELOW Rated Power with Green (ax2, zorder=0).
-    # 2. Fill ALL ABOVE Surge HR with Red (ax1, zorder=2).
-    # 3. Fill ALL ABOVE Rated Power with Red (ax2, zorder=2).
-    
-    # This setup ensures the Red fills (Surge and Overload) always draw over the 
-    # initial Green fill, resulting in the correct Red color in the overlap and surge zones.
-
-    # 1. BASE GREEN FILL (Below Rated Power)
+    # 1. SHADE OPERATING ZONE (GREEN) - BASE LAYER
+    # Fill ALL BELOW Rated Power. This sets up the base green area.
+    # zorder=0 (lowest), alpha=0.15 (light green)
     ax2.fill_between(qr2_for_shading, y2_min, rated_power_array, 
                      facecolor='green', alpha=0.15, zorder=0) 
 
     # --------------------------------------------------------------------------
-    # 2. NON-OPERATING ZONE - POWER OVERLOAD (RED)
+    # 2. SHADE NON-OPERATING ZONE - POWER OVERLOAD (RED)
     # Shade area above Rated Power. Uses high zorder (2).
+    # NOTE: Alpha increased to 0.5 to ensure it fully masks the green where they overlap 
+    # (though they shouldn't overlap here vertically, this ensures dominance).
     ax2.fill_between(qr2_for_shading, rated_power_array, y2_max, 
-                     facecolor='red', alpha=0.3, zorder=2) 
+                     facecolor='red', alpha=0.5, zorder=2) 
     
     # --------------------------------------------------------------------------
-    # 3. NON-OPERATING ZONE - SURGE (RED)
+    # 3. SHADE NON-OPERATING ZONE - SURGE (RED)
     # Shade area ABOVE Surge Line. Uses high zorder (2) to ensure it covers 
     # the green area where Hr is too high (i.e., the overlapping area is red).
+    # NOTE: Alpha increased to 0.5 to ensure it fully masks the green in the Hr > Surge Hr area.
     ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], y1_max, 
                      where=(df_sorted['Surge HR'] <= y1_max),
-                     facecolor='red', alpha=0.3, zorder=2) 
+                     facecolor='red', alpha=0.5, zorder=2) 
     # --------------------------------------------------------------------------
 
     # --- CURVES (Draw last with high zorder=3) ---
@@ -259,9 +242,9 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- Legend Construction ---
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
-    # Proxy artists for the shading zones (using single patches for the zones)
+    # Proxy artists for the shading zones (reflecting colors/alpha)
     hr_operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Operating Zone (Hr < Surge & Pwr < Rated)')
-    power_overload_zone_patch = Patch(facecolor='red', alpha=0.3, label='Non-Operating Zone (Red)')
+    power_overload_zone_patch = Patch(facecolor='red', alpha=0.5, label='Non-Operating Zone (Red)')
 
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
@@ -312,7 +295,7 @@ def execute_plotting_and_excel_embedding():
     rated_power = st.number_input(
         "Enter Compressor Rated Power (kW):",
         min_value=1,
-        value=4481, # Default value from the original code
+        value=4481, # Default value
         step=10,
         help="This value defines the horizontal 'Rated Power' line on the Performance Map."
     )
@@ -333,12 +316,10 @@ def execute_plotting_and_excel_embedding():
     
     # --- Data Reading and Validation ---
     try:
-        # Read the uploaded Excel file from the Streamlit buffer
-        uploaded_file.seek(0) # Ensure pointer is at the start
+        uploaded_file.seek(0)
         df = pd.read_excel(uploaded_file)
     except Exception as e:
-        st.error(f"❌ Error reading Excel file. Ensure it's a valid .xlsx file. Error: {e}")
-        st.warning("If you see a dependency error (like 'openpyxl'), make sure it's listed in your requirements.txt.")
+        st.error(f"❌ Error reading Excel file. Error: {e}")
         return
 
     # Data Cleaning and Validation
@@ -384,23 +365,21 @@ def execute_plotting_and_excel_embedding():
                 process_name, process_buffer = plot_qr2_vs_discharge_pressure_by_temp(df_pressure, df_sorted_pressure, pressure)
                 all_plot_data.append((process_name, process_buffer))
                 
-                # Plot Set 2: Performance Map
+                # Plot Set 2: Performance Map (uses the final corrected shading logic)
                 performance_name, performance_buffer = plot_superimposed_map_triple_axis(df_pressure, df_sorted_pressure, rated_power, pressure)
                 all_plot_data.append((performance_name, performance_buffer))
                 
                 # Update progress
                 plot_progress.progress((i + 1) / len(unique_pressures), text=f"Generated plots for P: {pressure} barg")
 
-            plot_progress.empty() # Clear the progress bar after completion
+            plot_progress.empty()
             st.success("All plots generated successfully!")
             
             # 2. Embed all plots
             for plot_name, plot_buffer in all_plot_data:
-                # Use a truncated sheet name for Excel compatibility
                 sheet_name = plot_name.replace('.png', '').replace('Process_', 'Curve_')[:31] 
                 worksheet = workbook.add_worksheet(sheet_name) 
                 
-                # Insert the plot from the in-memory buffer
                 worksheet.insert_image('A1', plot_name, {
                     'image_data': plot_buffer, 
                     'x_scale': 0.7, 
