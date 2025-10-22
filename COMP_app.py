@@ -5,6 +5,7 @@ import os
 import xlsxwriter
 import streamlit as st
 from io import BytesIO
+from matplotlib.patches import Patch # Keep this import for the legend patches
 
 # ----------------------------------------------------------------------
 # GLOBAL CONFIGURATION
@@ -92,7 +93,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     """
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
-    MODIFIED: Added green/red shading zones for Surge HR and Rated Power.
+    MODIFIED: Added green shading zones for Surge HR and Rated Power to indicate operating zones.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -134,22 +135,15 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         actual_hr_handles.append(line)
 
     # --------------------------------------------------------------------------
-    # --- ADD SHADING FOR SURGE LINE (Qr^2 vs Hr) ---
+    # --- MODIFIED SHADING FOR OPERATING ZONE ---
     # --------------------------------------------------------------------------
-    min_hr, max_hr = ax1.get_ylim() # Get current Y-limits to define red zone top
     qr2_for_shading = df_sorted['Qr2']
-    surge_hr_for_shading = df_sorted['Surge HR']
 
-    # Green Zone (Below Surge HR)
-    ax1.fill_between(qr2_for_shading, surge_hr_for_shading, min_hr, 
-                     where=(surge_hr_for_shading >= min_hr),
-                     facecolor='#90EE90', alpha=0.3, label='Safe Zone (Hr)') # Light Green
-
-    # Red Zone (Above Surge HR)
-   # ax1.fill_between(qr2_for_shading, surge_hr_for_shading, max_hr,
-                    # where=(max_hr >= surge_hr_for_shading),
-                   #  facecolor='#FFCCCB', alpha=0.3, label='Surge Zone (Hr)') # Light Red
-    # --------------------------------------------------------------------------
+    # 1. Hr Operating Zone (Below Surge HR - Red Line)
+    # Fill between the Surge HR line and the bottom of the Hr axis
+    ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], ax1.get_ylim()[0],
+                     where=(df_sorted['Surge HR'] >= ax1.get_ylim()[0]),
+                     facecolor='green', alpha=0.15, zorder=0) # Lower alpha for visibility of lines
 
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
     ax2 = ax1.twinx()
@@ -183,22 +177,13 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         label=f'Rated Power ({rated_power} kW)'
     )
 
+    # 2. Power Operating Zone (Below Rated Power - Black Dotted Line)
+    # Fill between the Rated Power line and the bottom of the Power axis
+    ax2.fill_between(qr2_for_shading, [rated_power] * len(df_sorted), ax2.get_ylim()[0],
+                     where=([rated_power] * len(df_sorted) >= ax2.get_ylim()[0]),
+                     facecolor='green', alpha=0.15, zorder=0) # Lower alpha for visibility of lines
     # --------------------------------------------------------------------------
-    # --- ADD SHADING FOR RATED POWER LINE (Qr^2 vs Power) ---
-    # --------------------------------------------------------------------------
-    min_power, max_power = ax2.get_ylim() # Get current Y-limits for power axis
-    rated_power_line_values = [rated_power] * len(df_sorted)
 
-    # Green Zone (Below Rated Power)
-    ax2.fill_between(qr2_for_shading, rated_power_line_values, min_power,
-                     where=(rated_power_line_values >= min_power),
-                     facecolor='#90EE90', alpha=0.3, label='Safe Zone (Pwr)') # Light Green
-
-    # Red Zone (Above Rated Power)
-  #  ax2.fill_between(qr2_for_shading, rated_power_line_values, max_power,
-                  #   where=(max_power >= rated_power_line_values),
-                   #  facecolor='#FFCCCB', alpha=0.3, label='Overload Zone (Pwr)') # Light Red
-    # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
     ax3 = ax1.twiny()
@@ -227,23 +212,18 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
     # IMPORTANT: Include the fill_between legends here.
-    # We need to collect handles from all axes and the fill_between calls.
     # Create proxy artists for the fill_between legends if they don't appear automatically
-    from matplotlib.patches import Patch
-    surge_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Hr Safe Zone')
-    surge_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Hr Surge Zone')
-    power_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Pwr Safe Zone')
-    power_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Pwr Overload Zone')
+    # Only one 'Operating Zone' patch needed for the legend, as both fill_between calls use the same logic
+    operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Operating Zone')
 
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
     power_legend_handles = [rated_power_line] + power_handles
 
-    all_handles = hr_legend_handles + power_legend_handles + [surge_safe_patch, surge_red_patch, power_safe_patch, power_red_patch]
+    all_handles = hr_legend_handles + power_legend_handles + [operating_zone_patch]
     all_labels = [h.get_label() for h in hr_legend_handles] + \
                  [h.get_label() for h in power_legend_handles] + \
-                 [surge_safe_patch.get_label(), surge_red_patch.get_label(), 
-                  power_safe_patch.get_label(), power_red_patch.get_label()]
+                 [operating_zone_patch.get_label()]
 
 
     # Use bbox_to_anchor for fine positioning
@@ -267,7 +247,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT
+# STREAMLIT MAIN EXECUTION SCRIPT (REMAINS UNTOUCHED)
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
