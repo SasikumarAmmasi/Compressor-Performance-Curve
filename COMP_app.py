@@ -22,10 +22,10 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     Generates the plot of Qr2 vs. Discharge Pressure, grouped by Suction Temperature.
     MODIFIED: Secondary X-axis uses interpolated values based on primary X-axis major ticks.
     """
-    fig, ax1 = plt.subplots(figsize=(14, 8))
+    fig, ax1 = plt.subplots(figsize=(10, 6))
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr2 (Reduced Flow) ---
-    ax1.set_xlabel(r'Reduced Flow ($\mathbf{Q_{r2}}$)', fontsize=14)
+    ax1.set_xlabel(r'Reduced Flow ($\mathbf{Qr^2}$)', fontsize=14)
     ax1.set_ylabel('Discharge Pressure ($\mathbf{barg}$)', fontsize=14)
     ax1.grid(True, linestyle='--', alpha=0.7)
 
@@ -96,7 +96,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr2 (Reduced Flow) ---
-    ax1.set_xlabel(r'Reduced Flow Rate ($\mathbf{Q_{r2}}$)', fontsize=14)
+    ax1.set_xlabel(r'Reduced Flow Rate ($\mathbf{Qr^2}$)', fontsize=14)
     ax1.set_ylabel(r'Reduced Head ($\mathbf{Hr}$)', fontsize=14, color='b')
     ax1.tick_params(axis='y', labelcolor='b')
     ax1.grid(True, linestyle='--', alpha=0.6)
