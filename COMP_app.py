@@ -5,7 +5,7 @@ import os
 import xlsxwriter
 import streamlit as st
 from io import BytesIO
-from matplotlib.patches import Patch # Import Patch for custom legend handles
+from matplotlib.patches import Patch
 
 # ----------------------------------------------------------------------
 # PLOTTING FUNCTIONS
@@ -75,11 +75,12 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     return plot_filename, plot_buffer
 
 
-# PLOT 2: Complex Superimposed Map (Triple-Axis) - FINAL SHADING LOGIC
+# PLOT 2: Complex Superimposed Map (Triple-Axis) - UPDATED SHADING LOGIC
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
-    Generates the final superimposed plot.
-    Shading Logic: Green is the base layer, Red (Surge or Overload) is the mask layer.
+    Generates the final superimposed plot with updated shading logic.
+    Operating Zone (Green): ONLY where BOTH (Hr < Surge HR) AND (Power < Rated Power)
+    Non-Operating Zone (Red): Anywhere else (above surge OR above rated power)
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
     qr2_for_shading = df_sorted['Qr2']
@@ -113,32 +114,86 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     y2_max = max_power + power_range * 0.05
     ax2.set_ylim(y2_min, y2_max)
 
-    # --- SHADING IMPLEMENTATION (Red Zone first, Green Zone by exclusion) ---
+    # --- NEW SHADING LOGIC ---
+    # We need to convert both axes to normalized coordinates to find the true intersection
+    
     rated_power_array = np.full_like(qr2_for_shading, rated_power, dtype=float)
-
-    # --------------------------------------------------------------------------
-    # 1. SHADE OPERATING ZONE (GREEN) - BASE LAYER
-    # Fill ALL BELOW Rated Power. This sets up the base area where Green *could* be.
-    # zorder=0 (lowest), alpha=0.15
-    ax2.fill_between(qr2_for_shading, y2_min, rated_power_array, 
-                     facecolor='green', alpha=0.15, zorder=0) 
-
-    # --------------------------------------------------------------------------
-    # 2. NON-OPERATING ZONE - POWER OVERLOAD (RED)
-    # Shade area above Rated Power (on ax2). This is the RED OVERLOAD ZONE.
-    # zorder=2 (high), alpha=0.5 (strong mask)
-    ax2.fill_between(qr2_for_shading, rated_power_array, y2_max, 
-                     facecolor='red', alpha=0.5, zorder=2) 
+    surge_hr_array = df_sorted['Surge HR'].values
+    power_array = df_sorted['Power (kW)'].values
+    
+    # Normalize coordinates to [0, 1] range for comparison
+    # For Hr (ax1):
+    hr_normalized_surge = (surge_hr_array - y1_min) / (y1_max - y1_min)
+    
+    # For Power (ax2):
+    power_normalized_actual = (power_array - y2_min) / (y2_max - y2_min)
+    power_normalized_rated = (rated_power - y2_min) / (y2_max - y2_min)
+    
+    # Operating zone condition: BOTH below surge AND below rated power
+    # In normalized space: both conditions must be true
+    operating_condition = (power_array < rated_power)  # Below rated power
     
     # --------------------------------------------------------------------------
-    # 3. NON-OPERATING ZONE - SURGE (RED)
-    # Shade area ABOVE Surge Line (on ax1). This is the RED SURGE ZONE.
-    # This red fill will cover any green underneath it, fixing the overlap issue.
-    # zorder=2 (high), alpha=0.5 (strong mask)
-    ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], y1_max, 
-                     where=(df_sorted['Surge HR'] <= y1_max),
-                     facecolor='red', alpha=0.5, zorder=2) 
+    # 1. SHADE OPERATING ZONE (GREEN) - Only where BOTH conditions are met
+    # This is the region below BOTH the surge line AND rated power line
     # --------------------------------------------------------------------------
+    # Fill from y1_min to Surge HR, but ONLY where power is also below rated
+    ax1.fill_between(
+        qr2_for_shading, 
+        y1_min, 
+        surge_hr_array,
+        where=operating_condition,
+        facecolor='green', 
+        alpha=0.2, 
+        zorder=1,
+        interpolate=True
+    )
+    
+    # --------------------------------------------------------------------------
+    # 2. NON-OPERATING ZONE - SURGE (RED)
+    # Shade area ABOVE Surge Line (on ax1)
+    # --------------------------------------------------------------------------
+    ax1.fill_between(
+        qr2_for_shading, 
+        surge_hr_array, 
+        y1_max,
+        where=(surge_hr_array <= y1_max),
+        facecolor='red', 
+        alpha=0.3, 
+        zorder=1,
+        interpolate=True
+    )
+    
+    # --------------------------------------------------------------------------
+    # 3. NON-OPERATING ZONE - POWER OVERLOAD (RED)
+    # Shade area above Rated Power (on ax2)
+    # --------------------------------------------------------------------------
+    ax2.fill_between(
+        qr2_for_shading, 
+        rated_power_array, 
+        y2_max,
+        facecolor='red', 
+        alpha=0.3, 
+        zorder=1,
+        interpolate=True
+    )
+    
+    # --------------------------------------------------------------------------
+    # 4. NON-OPERATING ZONE - BETWEEN LINES (RED)
+    # Shade the area below surge line but ABOVE rated power
+    # This captures the "gap" region
+    # --------------------------------------------------------------------------
+    non_operating_below_surge = ~operating_condition  # Above rated power
+    ax1.fill_between(
+        qr2_for_shading,
+        y1_min,
+        surge_hr_array,
+        where=non_operating_below_surge,
+        facecolor='red',
+        alpha=0.3,
+        zorder=1,
+        interpolate=True
+    )
 
     # --- CURVES (Draw last with highest zorder=3) ---
 
@@ -228,17 +283,16 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
     # Proxy artists for the shading zones 
-    hr_operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Operating Zone (Hr < Surge & Pwr < Rated)')
-    power_overload_zone_patch = Patch(facecolor='red', alpha=0.5, label='Non-Operating Zone (Red)')
+    hr_operating_zone_patch = Patch(facecolor='green', alpha=0.2, label='Operating Zone (Below Surge & Below Rated Power)')
+    power_non_operating_zone_patch = Patch(facecolor='red', alpha=0.3, label='Non-Operating Zone (Above Surge OR Above Rated Power)')
 
     hr_legend_handles = [surge_line] + actual_hr_handles
     power_legend_handles = [rated_power_line] + power_handles
 
-    all_handles = hr_legend_handles + power_legend_handles + [hr_operating_zone_patch, power_overload_zone_patch]
+    all_handles = hr_legend_handles + power_legend_handles + [hr_operating_zone_patch, power_non_operating_zone_patch]
     all_labels = [h.get_label() for h in hr_legend_handles] + \
                  [h.get_label() for h in power_legend_handles] + \
-                 [hr_operating_zone_patch.get_label(), power_overload_zone_patch.get_label()]
-
+                 [hr_operating_zone_patch.get_label(), power_non_operating_zone_patch.get_label()]
 
     ax1.legend(all_handles, all_labels,
                title='Curves & Zones (Hr Left, Pwr Right)',
