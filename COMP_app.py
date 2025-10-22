@@ -9,45 +9,63 @@ from io import BytesIO
 # ----------------------------------------------------------------------
 # GLOBAL CONFIGURATION
 # ----------------------------------------------------------------------
-# RATED_POWER is now REMOVED as a fixed global constant.
 TEMP_DIR = 'temp_plots'
 
 
 # ----------------------------------------------------------------------
-# PLOTTING FUNCTIONS (NO CHANGE NEEDED HERE, as they already accept rated_power)
+# PLOTTING FUNCTIONS (PLOT 1 MODIFIED)
 # ----------------------------------------------------------------------
 
 # PLOT 1: Qr2 vs. Discharge Pressure (Grouped by Suction Temperature)
 def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     """
-    Generates the plot of Qr2 vs. Discharge Pressure, grouped by Suction Temperature,
-    and returns the filename (or a reference) and the plot data as BytesIO.
+    Generates the plot of Qr2 vs. Discharge Pressure, grouped by Suction Temperature.
+    MODIFIED: Removed points and added secondary X-axis (Actual Gas Flow).
     """
-    fig = plt.figure(figsize=(10, 6))
-    ax = fig.gca()
+    fig, ax1 = plt.subplots(figsize=(10, 6)) # Use subplots for twin axes
+
+    # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr2 (Reduced Flow) ---
+    ax1.set_xlabel(r'Reduced Flow ($\mathbf{Q_{r2}}$)', fontsize=14)
+    ax1.set_ylabel('Discharge Pressure ($\mathbf{barg}$)', fontsize=14)
+    ax1.grid(True, linestyle='--', alpha=0.7)
 
     grouped = df.groupby('Suction Temperature Deg C')
     unique_temps = sorted(df['Suction Temperature Deg C'].unique())
-
-    # Generate colors for the curves
     colors = plt.cm.viridis(np.linspace(0, 1, len(unique_temps)))
 
     for i, temp in enumerate(unique_temps):
         group = grouped.get_group(temp).sort_values(by='Qr2')
-        ax.plot(
+        ax1.plot(
             group['Qr2'],
             group['Discharge Pressure barg'],
-            marker='o',
+            # REMOVED: marker='o' -> making it a plain curve
             linestyle='-',
             color=colors[i],
             label=f'{temp}°C'
         )
 
-    ax.set_title(f'Process Curve - Suction Pressure: {pressure_value} barg', fontsize=18)
-    ax.set_xlabel(r'Reduced Flow ($\mathbf{Q_{r2}}$)', fontsize=14)
-    ax.set_ylabel('Discharge Pressure ($\mathbf{barg}$)', fontsize=14)
-    ax.grid(True, linestyle='--', alpha=0.7)
-    ax.legend(title='Suction Temperature', loc='upper right')
+    # --- B. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
+    ax3 = ax1.twiny()
+
+    # Use the pre-sorted df_sorted for axis alignment
+    n_labels = 6
+    flow_indices = np.linspace(0, len(df_sorted) - 1, n_labels).astype(int)
+    
+    # Ensure the column name used here matches the main function rename
+    flow_col = 'Actual Gas Flow (Am3/hr)'
+    
+    flow_labels_qr2 = df_sorted['Qr2'].iloc[flow_indices].values
+    flow_labels_amch = df_sorted[flow_col].iloc[flow_indices].values.astype(int)
+
+    ax3.set_xticks(flow_labels_qr2)
+    ax3.set_xticklabels(flow_labels_amch)
+
+    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange')
+    ax3.tick_params(axis='x', labelcolor='darkorange')
+    ax3.set_xlim(ax1.get_xlim()) # Ensure the top axis limits match the bottom axis
+
+    ax1.set_title(f'Process Curve - Suction Pressure: {pressure_value} barg', fontsize=18)
+    ax1.legend(title='Suction Temperature', loc='upper right')
     fig.tight_layout()
     
     # Save plot to an in-memory buffer
@@ -64,7 +82,8 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
 # PLOT 2: Complex Superimposed Map (Triple-Axis)
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
-    Generates the final superimposed plot and returns the filename and the plot data as BytesIO.
+    Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
+    and Actual Gas Flow (Secondary X). (NO CHANGE)
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -189,7 +208,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT (MODIFIED FOR INPUT)
+# STREAMLIT MAIN EXECUTION SCRIPT
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
@@ -201,7 +220,7 @@ def execute_plotting_and_excel_embedding():
     st.title("🗜️ Compressor Performance Analysis and Reporting")
     st.markdown("Upload an Excel file containing compressor performance data to generate process curves and performance maps, grouped by unique suction pressure values.")
     
-    # --- RATED POWER INPUT (New Addition) ---
+    # --- RATED POWER INPUT ---
     st.subheader("1. Configuration")
     rated_power = st.number_input(
         "Enter Compressor Rated Power (kW):",
@@ -228,12 +247,15 @@ def execute_plotting_and_excel_embedding():
     # --- Data Reading and Validation ---
     try:
         # Read the uploaded Excel file from the Streamlit buffer
+        uploaded_file.seek(0) # Ensure pointer is at the start
         df = pd.read_excel(uploaded_file)
     except Exception as e:
         st.error(f"❌ Error reading Excel file. Ensure it's a valid .xlsx file. Error: {e}")
+        st.warning("If you see a dependency error (like 'openpyxl'), make sure it's listed in your requirements.txt.")
         return
 
     # Data Cleaning and Validation
+    # NOTE: 'Actual Gas Flow (AMCH)' must be present in the original Excel file!
     df.rename(columns={'Actual Gas Flow (AMCH)': 'Actual Gas Flow (Am3/hr)'}, inplace=True)
 
     required_columns = [
@@ -272,12 +294,11 @@ def execute_plotting_and_excel_embedding():
                 df_pressure = df[df['Suction Pressure barg'] == pressure].copy()
                 df_sorted_pressure = df_pressure.sort_values(by='Qr2').reset_index(drop=True)
                 
-                # Plot Set 1: Process Curve
+                # Plot Set 1: Process Curve (MODIFIED function is called)
                 process_name, process_buffer = plot_qr2_vs_discharge_pressure_by_temp(df_pressure, df_sorted_pressure, pressure)
                 all_plot_data.append((process_name, process_buffer))
                 
                 # Plot Set 2: Performance Map
-                # 🚨 CHANGE: Pass the user-input 'rated_power' instead of the fixed constant
                 performance_name, performance_buffer = plot_superimposed_map_triple_axis(df_pressure, df_sorted_pressure, rated_power, pressure)
                 all_plot_data.append((performance_name, performance_buffer))
                 
@@ -289,7 +310,7 @@ def execute_plotting_and_excel_embedding():
             
             # 2. Embed all plots
             for plot_name, plot_buffer in all_plot_data:
-                worksheet = workbook.add_worksheet(plot_name.replace('.png', '')) # Max 31 chars
+                worksheet = workbook.add_worksheet(plot_name.replace('.png', '').replace('Process_', 'Curve_')) # Max 31 chars
                 # Insert the plot from the in-memory buffer
                 worksheet.insert_image('A1', plot_name, {
                     'image_data': plot_buffer, 
