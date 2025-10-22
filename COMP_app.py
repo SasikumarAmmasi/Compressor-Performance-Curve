@@ -114,84 +114,88 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     y2_max = max_power + power_range * 0.05
     ax2.set_ylim(y2_min, y2_max)
 
-    # --- NEW SHADING LOGIC ---
-    # We need to convert both axes to normalized coordinates to find the true intersection
-    
+    # --- CORRECTED SHADING LOGIC ---
     rated_power_array = np.full_like(qr2_for_shading, rated_power, dtype=float)
     surge_hr_array = df_sorted['Surge HR'].values
     power_array = df_sorted['Power (kW)'].values
     
-    # Normalize coordinates to [0, 1] range for comparison
-    # For Hr (ax1):
-    hr_normalized_surge = (surge_hr_array - y1_min) / (y1_max - y1_min)
+    # Convert Power axis values to Hr axis coordinates for proper comparison
+    # This allows us to compare surge line and rated power line on the same scale
+    def power_to_hr_scale(power_val):
+        """Convert power axis value to hr axis coordinate"""
+        # Normalize power to [0,1] range on ax2
+        power_norm = (power_val - y2_min) / (y2_max - y2_min)
+        # Convert to hr scale
+        hr_equiv = y1_min + power_norm * (y1_max - y1_min)
+        return hr_equiv
     
-    # For Power (ax2):
-    power_normalized_actual = (power_array - y2_min) / (y2_max - y2_min)
-    power_normalized_rated = (rated_power - y2_min) / (y2_max - y2_min)
+    # Convert rated power line to Hr scale
+    rated_power_in_hr_scale = power_to_hr_scale(rated_power)
+    rated_power_hr_array = np.full_like(qr2_for_shading, rated_power_in_hr_scale, dtype=float)
     
-    # Operating zone condition: BOTH below surge AND below rated power
-    # In normalized space: both conditions must be true
-    operating_condition = (power_array < rated_power)  # Below rated power
+    # Convert actual power values to Hr scale
+    power_in_hr_scale = power_to_hr_scale(power_array)
+    
+    # Find the effective upper boundary (minimum of surge line and rated power in hr scale)
+    # This represents the "safe" operating envelope
+    effective_upper_boundary = np.minimum(surge_hr_array, rated_power_hr_array)
     
     # --------------------------------------------------------------------------
-    # 1. SHADE OPERATING ZONE (GREEN) - Only where BOTH conditions are met
-    # This is the region below BOTH the surge line AND rated power line
+    # 1. SHADE OPERATING ZONE (GREEN) 
+    # Only where BOTH: below surge line AND below rated power line
     # --------------------------------------------------------------------------
-    # Fill from y1_min to Surge HR, but ONLY where power is also below rated
     ax1.fill_between(
         qr2_for_shading, 
         y1_min, 
-        surge_hr_array,
-        where=operating_condition,
+        effective_upper_boundary,
         facecolor='green', 
-        alpha=0.2, 
+        alpha=0.25, 
         zorder=1,
         interpolate=True
     )
     
     # --------------------------------------------------------------------------
-    # 2. NON-OPERATING ZONE - SURGE (RED)
-    # Shade area ABOVE Surge Line (on ax1)
+    # 2. NON-OPERATING ZONE - ABOVE SURGE LINE (RED)
+    # Shade area ABOVE Surge Line
     # --------------------------------------------------------------------------
     ax1.fill_between(
         qr2_for_shading, 
         surge_hr_array, 
         y1_max,
-        where=(surge_hr_array <= y1_max),
         facecolor='red', 
-        alpha=0.3, 
-        zorder=1,
+        alpha=0.35, 
+        zorder=2,
         interpolate=True
     )
     
     # --------------------------------------------------------------------------
-    # 3. NON-OPERATING ZONE - POWER OVERLOAD (RED)
-    # Shade area above Rated Power (on ax2)
+    # 3. NON-OPERATING ZONE - ABOVE RATED POWER (RED)
+    # Shade area above Rated Power (converted to Hr scale)
     # --------------------------------------------------------------------------
-    ax2.fill_between(
+    ax1.fill_between(
         qr2_for_shading, 
-        rated_power_array, 
-        y2_max,
+        rated_power_hr_array, 
+        y1_max,
         facecolor='red', 
-        alpha=0.3, 
-        zorder=1,
+        alpha=0.35, 
+        zorder=2,
         interpolate=True
     )
     
     # --------------------------------------------------------------------------
     # 4. NON-OPERATING ZONE - BETWEEN LINES (RED)
-    # Shade the area below surge line but ABOVE rated power
-    # This captures the "gap" region
+    # Fill the gap between surge and rated power where they don't overlap
     # --------------------------------------------------------------------------
-    non_operating_below_surge = ~operating_condition  # Above rated power
+    # Where rated power is below surge line (gap exists)
+    gap_condition = rated_power_hr_array < surge_hr_array
     ax1.fill_between(
         qr2_for_shading,
-        y1_min,
+        rated_power_hr_array,
         surge_hr_array,
-        where=non_operating_below_surge,
+        where=gap_condition,
         facecolor='red',
-        alpha=0.3,
-        zorder=1,
+        alpha=0.35,
+        zorder=2,
         interpolate=True
     )
 
