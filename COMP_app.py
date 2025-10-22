@@ -92,7 +92,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     """
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
-    FINAL LOGIC: Operating zone (Green) is where Hr < Surge AND Pwr < Rated. 
+    FINAL LOGIC: Operating zone (Green) is strictly where Hr < Surge AND Pwr < Rated. 
     Non-operating zones (Red) cover all other areas.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
@@ -132,28 +132,39 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # Get the Surge HR data array for the 'where' condition
     surge_hr_array = df_sorted['Surge HR'].values
-
-    # --------------------------------------------------------------------------
-    # 1. SHADE BASE OPERATING ZONE (GREEN) - LIMITED BY SURGE LINE
-    # Shade the entire area below the Rated Power line (on ax2), BUT only 
-    # where the Surge HR line is ABOVE the minimum Y-axis limit (i.e., operating range).
-    # Since we are shading on ax2, we cannot directly use the surge line in the `where`
-    # clause as y-values. We rely on the red surge fill below to cover the unsafe area.
-    # We revert to the simpler green fill for the area below rated power, 
-    # and use the red fills with high zorder to cover the non-operating zones.
     
-    # Shade the area BELOW the Rated Power line. This sets up the base green.
+    # --------------------------------------------------------------------------
+    # 1. SHADE OPERATING ZONE (GREEN) - PRECISELY DEFINED
+    # Shade the area BELOW the Rated Power line (on ax2), 
+    # BUT only where the Reduced Head (Surge HR) is GREATER THAN the minimum Y-axis limit (y1_min).
+    
+    # Define the precise Green Zone condition (Hr < Surge Hr is simplified by comparing Surge HR to y1_min)
+    # The green fill needs to stop precisely at the Surge HR line in the y-direction, 
+    # which is difficult with fill_between on a separate axis (ax2).
+    
+    # SOLUTION: Use the Surge HR line as the *upper boundary* of the green fill in ax1, 
+    # but only where the Rated Power condition is met (using a combined where condition).
+    
+    # Since we cannot mix axes, we will revert to the most reliable method:
+    # 1. Fill ALL BELOW Rated Power with Green (ax2, zorder=0).
+    # 2. Fill ALL ABOVE Surge HR with Red (ax1, zorder=2).
+    # 3. Fill ALL ABOVE Rated Power with Red (ax2, zorder=2).
+    
+    # This setup ensures the Red fills (Surge and Overload) always draw over the 
+    # initial Green fill, resulting in the correct Red color in the overlap and surge zones.
+
+    # 1. BASE GREEN FILL (Below Rated Power)
     ax2.fill_between(qr2_for_shading, y2_min, rated_power_array, 
                      facecolor='green', alpha=0.15, zorder=0) 
 
     # --------------------------------------------------------------------------
-    # 2. SHADE NON-OPERATING ZONE - POWER OVERLOAD (RED)
-    # Shade area above Rated Power. Uses high zorder (2) to cover green below.
+    # 2. NON-OPERATING ZONE - POWER OVERLOAD (RED)
+    # Shade area above Rated Power. Uses high zorder (2).
     ax2.fill_between(qr2_for_shading, rated_power_array, y2_max, 
                      facecolor='red', alpha=0.3, zorder=2) 
     
     # --------------------------------------------------------------------------
-    # 3. SHADE NON-OPERATING ZONE - SURGE (RED)
+    # 3. NON-OPERATING ZONE - SURGE (RED)
     # Shade area ABOVE Surge Line. Uses high zorder (2) to ensure it covers 
     # the green area where Hr is too high (i.e., the overlapping area is red).
     ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], y1_max, 
@@ -284,7 +295,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT (REMAINS UNTOUCHED)
+# STREAMLIT MAIN EXECUTION SCRIPT
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
@@ -331,7 +342,6 @@ def execute_plotting_and_excel_embedding():
         return
 
     # Data Cleaning and Validation
-    # NOTE: 'Actual Gas Flow (AMCH)' must be present in the original Excel file!
     df.rename(columns={'Actual Gas Flow (AMCH)': 'Actual Gas Flow (Am3/hr)'}, inplace=True)
 
     required_columns = [
