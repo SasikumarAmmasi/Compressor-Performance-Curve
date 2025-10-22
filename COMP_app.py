@@ -180,9 +180,8 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     )
 
     # --------------------------------------------------------------------------
-    # --- REMOVED: Power Operating Zone shading (fill_between on ax2) ---
-    # This removal is key to fulfilling the request to remove shade between the
-    # rated power line (ax2) and the surge line (ax1).
+    # --- IMPORTANT: Power Operating Zone shading (fill_between on ax2) is OMITTED. ---
+    # This removes the shading up to the Rated Power line.
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
