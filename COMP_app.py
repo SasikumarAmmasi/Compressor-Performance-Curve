@@ -1,6 +1,6 @@
 # --- 1. INSTALLATION & SETUP ---
 # Install necessary libraries including pyngrok for the tunnel
-#!pip install pandas matplotlib numpy streamlit xlsxwriter pyngrok -q
+!pip install pandas matplotlib numpy streamlit xlsxwriter pyngrok -q
 
 # Import all modules
 import pandas as pd
@@ -18,8 +18,7 @@ from matplotlib.patches import Patch # Import Patch here to avoid internal error
 
 # --- Ngrok Authentication Setup ---
 # *** IMPORTANT: REPLACE "YOUR_AUTH_TOKEN" with your actual ngrok token ***
-# You can get your token from: https://dashboard.ngrok.com/get-started/your-authtoken
-NGROK_TOKEN = "YOUR_AUTH_TOKEN"
+NGROK_TOKEN = "YOUR_AUTH_TOKEN" 
 ngrok.set_auth_token(NGROK_TOKEN)
 # ----------------------------------------------------------------------
 # GLOBAL CONFIGURATION
@@ -40,7 +39,7 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr^2 (Reduced Flow) ---
     ax1.set_xlabel(r'Reduced Flow ($\mathbf{Qr^2}$)', fontsize=14)
-    ax1.set_ylabel(r'Discharge Pressure ($\mathbf{barg}$)', fontsize=14) # FIXED SyntaxWarning
+    ax1.set_ylabel(r'Discharge Pressure ($\mathbf{barg}$)', fontsize=14) # FIXED
     ax1.grid(True, linestyle='--', alpha=0.7)
 
     grouped = df.groupby('Suction Temperature Deg C')
@@ -75,7 +74,7 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     ax3.set_xticks(major_qr2_ticks)
     ax3.set_xticklabels(flow_labels_amch)
 
-    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange') # FIXED SyntaxWarning
+    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange') # FIXED
     ax3.tick_params(axis='x', labelcolor='darkorange', labelsize=10)
     ax3.set_xlim(ax1.get_xlim()) 
 
@@ -92,22 +91,21 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     return plot_filename, plot_buffer
 
 
-# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR SHADING
+# PLOT 2: Complex Superimposed Map (Triple-Axis)
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
     Generates the final superimposed plot.
-    MODIFIED: Only green shading (safe zones) below surge line and rated power line.
     FIXED: Using raw strings (r'') for LaTeX to fix SyntaxWarnings.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr^2 (Reduced Flow) ---
-    ax1.set_xlabel(r'Reduced Flow Rate ($\mathbf{Qr^2}$)', fontsize=14) # FIXED SyntaxWarning
-    ax1.set_ylabel(r'Reduced Head ($\mathbf{Hr}$)', fontsize=14, color='b') # FIXED SyntaxWarning
+    ax1.set_xlabel(r'Reduced Flow Rate ($\mathbf{Qr^2}$)', fontsize=14) # FIXED
+    ax1.set_ylabel(r'Reduced Head ($\mathbf{Hr}$)', fontsize=14, color='b') # FIXED
     ax1.tick_params(axis='y', labelcolor='b')
     ax1.grid(True, linestyle='--', alpha=0.6)
 
-    # Plot 1: Surge HR vs. Qr^2 (plain curve)
+    # Plot 1: Surge HR vs. Qr^2 
     surge_line, = ax1.plot(
         df_sorted['Qr2'],
         df_sorted['Surge HR'],
@@ -115,7 +113,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         linestyle='-',
         color='red',
         linewidth=3.0,
-        label=r'Surge Line ($\mathbf{Surge~Hr}$)' # FIXED SyntaxWarning
+        label=r'Surge Line ($\mathbf{Surge~Hr}$)' # FIXED
     )
 
     # Group by Temperature
@@ -138,27 +136,27 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         )
         actual_hr_handles.append(line)
 
-    # --------------------------------------------------------------------------
     # --- ADD SHADING FOR SURGE LINE (Qr^2 vs Hr) ---
-    # Only green zone below the surge line
-    # --------------------------------------------------------------------------
     qr2_for_shading = df_sorted['Qr2']
     surge_hr_for_shading = df_sorted['Surge HR']
 
     ax1.relim()
     ax1.autoscale_view()
-    min_hr, _ = ax1.get_ylim() # Only need min_hr for fill_between below the line
+    min_hr, max_hr = ax1.get_ylim()
 
     # Green Zone (Below Surge HR)
     ax1.fill_between(qr2_for_shading, surge_hr_for_shading, min_hr, 
-                     where=(surge_hr_for_shading >= min_hr), # Ensure it's not below the plot's min Y
-                     facecolor='#90EE90', alpha=0.3, label='Hr Safe Zone (Below Surge)') # Light Green
-    # Removed: Red Zone (Above Surge HR)
-    # --------------------------------------------------------------------------
+                     where=(surge_hr_for_shading >= min_hr),
+                     facecolor='#90EE90', alpha=0.3) 
+
+    # Red Zone (Above Surge HR)
+    ax1.fill_between(qr2_for_shading, surge_hr_for_shading, max_hr,
+                     where=(max_hr >= surge_hr_for_shading),
+                     facecolor='#FFCCCB', alpha=0.3) 
 
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
     ax2 = ax1.twinx()
-    ax2.set_ylabel(r'Power (kW)', fontsize=14, color='g') # FIXED SyntaxWarning
+    ax2.set_ylabel(r'Power (kW)', fontsize=14, color='g') # FIXED
     ax2.tick_params(axis='y', labelcolor='g')
 
     power_handles = []
@@ -188,21 +186,21 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         label=f'Rated Power ({rated_power} kW)'
     )
 
-    # --------------------------------------------------------------------------
     # --- ADD SHADING FOR RATED POWER LINE (Qr^2 vs Power) ---
-    # Only green zone below the rated power line
-    # --------------------------------------------------------------------------
     ax2.relim()
     ax2.autoscale_view()
-    min_power, _ = ax2.get_ylim() # Only need min_power for fill_between below the line
+    min_power, max_power = ax2.get_ylim() 
     rated_power_line_values = [rated_power] * len(df_sorted)
 
     # Green Zone (Below Rated Power)
     ax2.fill_between(qr2_for_shading, rated_power_line_values, min_power,
-                     where=(rated_power_line_values >= min_power), # Ensure it's not below the plot's min Y
-                     facecolor='#90EE90', alpha=0.3, label='Pwr Safe Zone (Below Rated)') # Light Green
-    # Removed: Red Zone (Above Rated Power)
-    # --------------------------------------------------------------------------
+                     where=(rated_power_line_values >= min_power),
+                     facecolor='#90EE90', alpha=0.3)
+
+    # Red Zone (Above Rated Power)
+    ax2.fill_between(qr2_for_shading, rated_power_line_values, max_power,
+                     where=(max_power >= rated_power_line_values),
+                     facecolor='#FFCCCB', alpha=0.3)
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
     ax3 = ax1.twiny()
@@ -222,7 +220,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax3.set_xticks(major_qr2_ticks)
     ax3.set_xticklabels(flow_labels_amch)
 
-    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange') # FIXED SyntaxWarning
+    ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange') # FIXED
     ax3.tick_params(axis='x', labelcolor='darkorange', labelsize=10)
     ax3.set_xlim(ax1.get_xlim())
 
@@ -230,16 +228,16 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
     # Create proxy artists for the fill_between legends
-    # Only create patches for the zones that actually exist (green ones)
     surge_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Hr Safe Zone (Below Surge)')
+    surge_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Hr Surge Zone (Above Surge)')
     power_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Pwr Safe Zone (Below Rated)')
+    power_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Pwr Overload Zone (Above Rated)')
 
-    # Get handles for lines
+    # Combine all handles and labels
     hr_legend_handles = [surge_line] + actual_hr_handles
     power_legend_handles = [rated_power_line] + power_handles
 
-    # Only include the safe zone patches in the legend
-    all_handles = hr_legend_handles + power_legend_handles + [surge_safe_patch, power_safe_patch]
+    all_handles = hr_legend_handles + power_legend_handles + [surge_safe_patch, surge_red_patch, power_safe_patch, power_red_patch]
     all_labels = [h.get_label() for h in all_handles]
 
     ax1.legend(all_handles, all_labels,
