@@ -93,6 +93,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
     MODIFIED: Green shading is below Surge Hr (Operating Zone). Red shading is above Rated Power (Overload Zone).
+    FIXED: The Power Overload fill_between call is corrected to match array sizes.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -144,12 +145,12 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         actual_hr_handles.append(line)
 
     # --------------------------------------------------------------------------
-    # --- RESTORED SHADING: Hr Operating Zone (on ax1) ---
-    # Fills the area between the Surge HR line and the calculated bottom of the Hr axis (y1_min).
+    # --- SHADING: Hr Operating Zone (on ax1) ---
     qr2_for_shading = df_sorted['Qr2']
+    # Fills the area between the Surge HR line and the calculated bottom of the Hr axis (y1_min).
     ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], y1_min, 
                      where=(df_sorted['Surge HR'] >= y1_min),
-                     facecolor='green', alpha=0.15, zorder=0) # Removed label for legend handling
+                     facecolor='green', alpha=0.15, zorder=0) 
     # --------------------------------------------------------------------------
     
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
@@ -159,7 +160,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # Calculate Y2 (Power) limits
     min_power = df['Power (kW)'].min()
-    max_power = max(df['Power (kW)'].max(), rated_power) # Ensure rated power is within the max
+    max_power = max(df['Power (kW)'].max(), rated_power)
     power_range = max_power - min_power
     
     # Set explicit Y2 limits with a 5% buffer
@@ -195,11 +196,14 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     )
 
     # --------------------------------------------------------------------------
-    # --- NEW SHADING: Power Overload Zone (on ax2) ---
-    # Fills the area between the Rated Power line and the top limit of the Power axis (y2_max).
-    ax2.fill_between(qr2_for_shading, rated_power, y2_max, 
-                     where=(rated_power <= y2_max), 
-                     facecolor='red', alpha=0.15, zorder=1) # Red for Overload
+    # --- SHADING: Power Overload Zone (on ax2) ---
+    # Create an array of rated_power to match the x-size (Fixes the where size error)
+    rated_power_array = np.full_like(qr2_for_shading, rated_power, dtype=float)
+    
+    # Fills the area between the Rated Power array and the top limit of the Power axis (y2_max).
+    ax2.fill_between(qr2_for_shading, rated_power_array, y2_max, 
+                     # Condition: Only shade where the rated power is below the max axis limit (always true here)
+                     facecolor='red', alpha=0.15, zorder=1) 
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
@@ -264,7 +268,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT (REMAINS UNTOUCHED)
+# STREAMLIT MAIN EXECUTION SCRIPT
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
@@ -312,6 +316,7 @@ def execute_plotting_and_excel_embedding():
 
     # Data Cleaning and Validation
     # NOTE: 'Actual Gas Flow (AMCH)' must be present in the original Excel file!
+    # This line ensures compatibility if the user's header is slightly different
     df.rename(columns={'Actual Gas Flow (AMCH)': 'Actual Gas Flow (Am3/hr)'}, inplace=True)
 
     required_columns = [
@@ -366,7 +371,10 @@ def execute_plotting_and_excel_embedding():
             
             # 2. Embed all plots
             for plot_name, plot_buffer in all_plot_data:
-                worksheet = workbook.add_worksheet(plot_name.replace('.png', '').replace('Process_', 'Curve_')) # Max 31 chars
+                # Use a truncated sheet name for Excel compatibility
+                sheet_name = plot_name.replace('.png', '').replace('Process_', 'Curve_')[:31] 
+                worksheet = workbook.add_worksheet(sheet_name) 
+                
                 # Insert the plot from the in-memory buffer
                 worksheet.insert_image('A1', plot_name, {
                     'image_data': plot_buffer, 
