@@ -5,8 +5,7 @@ import os
 import xlsxwriter
 import streamlit as st
 from io import BytesIO
-from matplotlib.patches import Patch
-from scipy.interpolate import interp1d
+from matplotlib.patches import Patch # Import Patch for custom legend handles
 
 # ----------------------------------------------------------------------
 # GLOBAL CONFIGURATION
@@ -88,12 +87,13 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     return plot_filename, plot_buffer
 
 
-# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR FILL_BETWEEN INTERSECTION
+# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR SHADING
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
-    Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y).
-    MODIFIED: Shading is a single fill_between based on the MINIMUM of the Surge HR line 
-    and the calculated Power Limit Hr curve (the intersection of both constraints).
+    Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
+    and Actual Gas Flow (Secondary X).
+    MODIFIED: Only green shading is applied below the Surge HR line on ax1.
+    The Rated Power line acts as a visual boundary but does not have dedicated fill_between shading.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -135,79 +135,18 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         actual_hr_handles.append(line)
 
     # --------------------------------------------------------------------------
-    # --- NEW SHADING LOGIC: COMBINED MINIMUM BOUNDARY (FILL_BETWEEN) ---
+    # --- MODIFIED SHADING: ONLY BELOW SURGE HR (on ax1) ---
+    # --------------------------------------------------------------------------
+    qr2_for_shading = df_sorted['Qr2']
+
+    # 1. Hr Operating Zone (Below Surge HR - Red Line)
+    # Fills the area between the Surge HR line and the bottom of the Hr axis (ax1).
+    ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], ax1.get_ylim()[0],
+                     where=(df_sorted['Surge HR'] >= ax1.get_ylim()[0]), # Ensure fill only below line
+                     facecolor='green', alpha=0.15, zorder=0, label='Hr Operating Zone') 
+    # The `label` here is temporary for internal Matplotlib handling; we'll use a `Patch` for the final legend.
     # --------------------------------------------------------------------------
     
-    # Get all Qr2, Hr, Power values for the current pressure
-    df_current_p = df[df['Suction Pressure barg'] == pressure_value].copy()
-    
-    # 1. Filter points where Power is below or equal to Rated Power (safe power zone)
-    pwr_safe_mask = df_current_p['Power (kW)'] <= rated_power
-    df_safe = df_current_p[pwr_safe_mask].copy()
-    
-    # 2. Determine the Hr boundary imposed by the Rated Power constraint.
-    # The highest Actual Hr value observed for any given Qr2 that is still in the safe power zone
-    # defines the most restrictive Hr boundary for the power constraint.
-    
-    qr2_for_shading = df_sorted['Qr2'].values
-    
-    if len(df_safe) > 1:
-        # Group by Qr2 (using interpolation points) and find the maximum safe Hr.
-        # Use a high number of interpolation points for a smooth curve
-        num_interp_points = 100 
-        interp_qr2 = np.linspace(df_current_p['Qr2'].min(), df_current_p['Qr2'].max(), num_interp_points)
-        
-        # We need a robust way to map the Rated Power constraint back to the Hr axis (ax1).
-        # This is achieved by interpolating the *actual* operating curves.
-        
-        power_limit_hr_boundary = np.full_like(qr2_for_shading, np.inf)
-
-        for temp in unique_temps:
-            group = df_current_p[df_current_p['Suction Temperature Deg C'] == temp].sort_values(by='Qr2')
-            
-            if len(group) > 1:
-                # Interpolate Power and Hr against Qr2 for the current temperature
-                pwr_interp = interp1d(group['Qr2'], group['Power (kW)'], kind='linear', bounds_error=False, fill_value="extrapolate")
-                hr_interp = interp1d(group['Qr2'], group['Actual Hr'], kind='linear', bounds_error=False, fill_value="extrapolate")
-                
-                # Check where power is safe for the current curve across all shading points
-                pwr_safe_at_qr2 = pwr_interp(qr2_for_shading) <= rated_power
-                
-                # Get the Hr values for the current curve where power is safe
-                temp_hr_at_safe_power = np.where(pwr_safe_at_qr2, hr_interp(qr2_for_shading), -np.inf)
-                
-                # The minimum of all these "safe" Hr boundaries for the power limit is the most restrictive boundary.
-                # Initialize power_limit_hr_boundary with the first valid curve's data, then take the minimum.
-                if np.isinf(power_limit_hr_boundary).all():
-                    power_limit_hr_boundary = np.where(pwr_safe_at_qr2, hr_interp(qr2_for_shading), np.inf)
-                else:
-                    # Use np.minimum to get the most restrictive (lowest) safe Hr boundary
-                    # np.where is needed to handle cases where one curve is safe but the other isn't.
-                    current_temp_hr_safe = np.where(pwr_safe_at_qr2, hr_interp(qr2_for_shading), np.inf)
-                    power_limit_hr_boundary = np.minimum(power_limit_hr_boundary, current_temp_hr_safe)
-
-    else:
-        # If no safe points exist, no shading should occur (keep boundary at 0 or below axis limit)
-        power_limit_hr_boundary = np.full_like(qr2_for_shading, -np.inf) 
-        
-    # 3. Combine with the Surge Hr Line (the other boundary)
-    # The intersection is the MINIMUM of the two upper bounds
-    combined_hr_limit = np.minimum(df_sorted['Surge HR'].values, power_limit_hr_boundary)
-
-    # 4. Apply fill_between using the combined boundary
-    ax1.fill_between(
-        qr2_for_shading, 
-        combined_hr_limit, 
-        ax1.get_ylim()[0],
-        # Only fill where the limit is above the axis bottom
-        where=(combined_hr_limit > ax1.get_ylim()[0]), 
-        facecolor='green', 
-        alpha=0.15, 
-        zorder=0,
-        label='Combined Operating Zone'
-    ) 
-    # --------------------------------------------------------------------------
-
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
     ax2 = ax1.twinx()
     ax2.set_ylabel('Power (kW)', fontsize=14, color='g')
@@ -230,7 +169,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         )
         power_handles.append(line)
 
-    # Plot 4: Rated Power Line
+    # Plot 4: Rated Power Line (NO SHADING directly from this line)
     rated_power_line, = ax2.plot(
         df_sorted['Qr2'],
         [rated_power] * len(df_sorted),
@@ -239,6 +178,13 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         linewidth=2.0,
         label=f'Rated Power ({rated_power} kW)'
     )
+
+    # --------------------------------------------------------------------------
+    # --- REMOVED: Power Operating Zone shading (fill_between on ax2) ---
+    # This ensures no green shading appears between the red surge line and the black rated power line,
+    # as the power line is no longer directly dictating a fill_between area.
+    # The Rated Power line now serves purely as a visual boundary for the power curves.
+    # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
     ax3 = ax1.twiny()
@@ -266,17 +212,17 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- Legend Construction ---
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
-    # Create proxy artist for the shading legend
-    operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Combined Operating Zone')
+    # IMPORTANT: Use one proxy artist for the green shading in the legend
+    hr_operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Hr Operating Zone')
 
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
-    power_legend_handles = [rated_power_line] + power_handles
+    power_legend_handles = [rated_power_line] + power_handles # Rated power line is still a handle
 
-    all_handles = hr_legend_handles + power_legend_handles + [operating_zone_patch]
+    all_handles = hr_legend_handles + power_legend_handles + [hr_operating_zone_patch]
     all_labels = [h.get_label() for h in hr_legend_handles] + \
                  [h.get_label() for h in power_legend_handles] + \
-                 [operating_zone_patch.get_label()]
+                 [hr_operating_zone_patch.get_label()]
 
 
     # Use bbox_to_anchor for fine positioning
