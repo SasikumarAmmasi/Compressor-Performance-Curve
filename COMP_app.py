@@ -87,13 +87,13 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     return plot_filename, plot_buffer
 
 
-# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR SHADING
+# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR COMBINED SHADING
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
-    MODIFIED: Only green shading is applied below the Surge HR line on ax1.
-    The Rated Power line acts as a visual boundary but does not have dedicated fill_between shading.
+    MODIFIED: Shading (Operating Zone) is achieved by plotting filtered data points
+    where Actual Hr is below Surge HR AND Power is below Rated Power.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -135,16 +135,30 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         actual_hr_handles.append(line)
 
     # --------------------------------------------------------------------------
-    # --- MODIFIED SHADING: ONLY BELOW SURGE HR (on ax1) ---
-    # This logic ensures shading does NOT extend up to the Rated Power line.
+    # --- MODIFIED SHADING LOGIC: Filtered Scatter Plot for Combined Zone ---
     # --------------------------------------------------------------------------
-    qr2_for_shading = df_sorted['Qr2']
-
-    # 1. Hr Operating Zone (Below Surge HR - Red Line)
-    # Fills the area between the Surge HR line and the bottom of the Hr axis (ax1).
-    ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], ax1.get_ylim()[0],
-                     where=(df_sorted['Surge HR'] >= ax1.get_ylim()[0]), # Ensure fill only below line
-                     facecolor='green', alpha=0.15, zorder=0, label='Hr Operating Zone') 
+    
+    # 1. Define the combined safety mask for ALL data points
+    is_below_surge = df['Actual Hr'] <= df['Surge HR']
+    is_below_rated_power = df['Power (kW)'] <= rated_power
+    
+    # The Operating Zone is the intersection of both safety conditions
+    operating_zone_mask = is_below_surge & is_below_rated_power
+    
+    # 2. Filter the data using the mask
+    df_safe = df[operating_zone_mask].sort_values(by='Qr2')
+    
+    # 3. Create the shading by plotting the safe points with large, transparent markers (on ax1)
+    # The 'scatter' plot here acts as the 'fill' and its handle is stored for the legend.
+    operating_zone_fill = ax1.scatter(
+        df_safe['Qr2'],
+        df_safe['Actual Hr'],
+        s=150,          # Marker size controls the 'density' of the shade
+        color='green',
+        alpha=0.15,     # Transparency
+        zorder=0,       # Plot behind lines
+        label='Combined Operating Zone'
+    )
     # --------------------------------------------------------------------------
     
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
@@ -169,7 +183,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         )
         power_handles.append(line)
 
-    # Plot 4: Rated Power Line (NO SHADING directly from this line)
+    # Plot 4: Rated Power Line
     rated_power_line, = ax2.plot(
         df_sorted['Qr2'],
         [rated_power] * len(df_sorted),
@@ -178,11 +192,6 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         linewidth=2.0,
         label=f'Rated Power ({rated_power} kW)'
     )
-
-    # --------------------------------------------------------------------------
-    # --- IMPORTANT: Power Operating Zone shading (fill_between on ax2) is OMITTED. ---
-    # This removes the shading up to the Rated Power line.
-    # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
     ax3 = ax1.twiny()
@@ -210,17 +219,17 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- Legend Construction ---
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
-    # IMPORTANT: Use one proxy artist for the green shading in the legend
-    hr_operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Hr Operating Zone')
-
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
-    power_legend_handles = [rated_power_line] + power_handles # Rated power line is still a handle
+    power_legend_handles = [rated_power_line] + power_handles
 
-    all_handles = hr_legend_handles + power_legend_handles + [hr_operating_zone_patch]
+    # Create proxy artist for the shading legend
+    operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Combined Operating Zone')
+
+    all_handles = hr_legend_handles + power_legend_handles + [operating_zone_patch]
     all_labels = [h.get_label() for h in hr_legend_handles] + \
                  [h.get_label() for h in power_legend_handles] + \
-                 [hr_operating_zone_patch.get_label()]
+                 [operating_zone_patch.get_label()]
 
 
     # Use bbox_to_anchor for fine positioning
