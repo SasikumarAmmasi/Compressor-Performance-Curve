@@ -227,4 +227,174 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
     # IMPORTANT: Include the fill_between legends here.
-    # We need to collect handles from all axes and the fill_between calls
+    # We need to collect handles from all axes and the fill_between calls.
+    # Create proxy artists for the fill_between legends if they don't appear automatically
+    from matplotlib.patches import Patch
+    surge_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Hr Safe Zone')
+    surge_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Hr Surge Zone')
+    power_safe_patch = Patch(facecolor='#90EE90', alpha=0.3, label='Pwr Safe Zone')
+    power_red_patch = Patch(facecolor='#FFCCCB', alpha=0.3, label='Pwr Overload Zone')
+
+    # Get handles for lines
+    hr_legend_handles = [surge_line] + actual_hr_handles
+    power_legend_handles = [rated_power_line] + power_handles
+
+    all_handles = hr_legend_handles + power_legend_handles + [surge_safe_patch, surge_red_patch, power_safe_patch, power_red_patch]
+    all_labels = [h.get_label() for h in hr_legend_handles] + \
+                 [h.get_label() for h in power_legend_handles] + \
+                 [surge_safe_patch.get_label(), surge_red_patch.get_label(), 
+                  power_safe_patch.get_label(), power_red_patch.get_label()]
+
+
+    # Use bbox_to_anchor for fine positioning
+    ax1.legend(all_handles, all_labels,
+               title='Curves & Zones (Hr Left, Pwr Right)',
+               loc='upper left',
+               bbox_to_anchor=(1.05, 1.0),
+               ncol=1,
+               fontsize=8)
+
+    fig.tight_layout()
+
+    # Save plot to an in-memory buffer
+    plot_buffer = BytesIO()
+    plt.savefig(plot_buffer, format='png', dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    plot_buffer.seek(0)
+    
+    # Return a descriptive filename and the buffer
+    plot_filename = f'Performance_Map_P_{pressure_value}.png'
+    return plot_filename, plot_buffer
+
+# ----------------------------------------------------------------------
+# STREAMLIT MAIN EXECUTION SCRIPT
+# ----------------------------------------------------------------------
+
+def execute_plotting_and_excel_embedding():
+    """
+    Manages the Streamlit workflow: file upload, data analysis, plotting,
+    and generating the output Excel file with embedded plots.
+    """
+    st.set_page_config(layout="wide", page_title="Compressor Analysis Tool")
+    st.title("🗜️ Compressor Performance Analysis and Reporting")
+    st.markdown("Upload an Excel file containing compressor performance data to generate process curves and performance maps, grouped by unique suction pressure values.")
+    
+    # --- RATED POWER INPUT ---
+    st.subheader("1. Configuration")
+    rated_power = st.number_input(
+        "Enter Compressor Rated Power (kW):",
+        min_value=1,
+        value=4481, # Default value from the original code
+        step=10,
+        help="This value defines the horizontal 'Rated Power' line on the Performance Map."
+    )
+
+    # --- Streamlit File Uploader ---
+    st.subheader("2. Data Upload")
+    uploaded_file = st.file_uploader(
+        "Upload your Excel data file (.xlsx)", 
+        type=['xlsx'],
+        help="The file must contain the required columns for analysis."
+    )
+    
+    if uploaded_file is None:
+        st.info("Awaiting file upload...")
+        return
+
+    st.success(f"File uploaded: {uploaded_file.name}")
+    
+    # --- Data Reading and Validation ---
+    try:
+        # Read the uploaded Excel file from the Streamlit buffer
+        uploaded_file.seek(0) # Ensure pointer is at the start
+        df = pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"❌ Error reading Excel file. Ensure it's a valid .xlsx file. Error: {e}")
+        st.warning("If you see a dependency error (like 'openpyxl'), make sure it's listed in your requirements.txt.")
+        return
+
+    # Data Cleaning and Validation
+    # NOTE: 'Actual Gas Flow (AMCH)' must be present in the original Excel file!
+    df.rename(columns={'Actual Gas Flow (AMCH)': 'Actual Gas Flow (Am3/hr)'}, inplace=True)
+
+    required_columns = [
+        'Suction Pressure barg', 'Suction Temperature Deg C', 
+        'Discharge Pressure barg', 'Actual Gas Flow (Am3/hr)', 
+        'Power (kW)', 'Actual Hr', 'Qr2', 'Surge HR'
+    ]
+    missing_columns = [col for col in required_columns if col not in df.columns]
+
+    if missing_columns:
+        st.error(f"❌ Error: Missing required columns in the uploaded data: {missing_columns}")
+        st.code(f"Required columns: {required_columns}", language="text")
+        return
+
+    # Analysis
+    unique_pressures = sorted(df['Suction Pressure barg'].unique())
+    st.subheader("3. Analysis & Plot Generation")
+    st.info(f"✅ Found {len(unique_pressures)} unique suction pressures: {unique_pressures}")
+    
+    all_plot_data = []
+    excel_buffer = BytesIO()
+    
+    # --- Create Excel Writer (in memory) ---
+    try:
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            
+            # 1. Write the Raw Data
+            df.to_excel(writer, sheet_name='Raw Data Input', index=False)
+            
+            workbook = writer.book
+
+            # Loop Through Each Suction Pressure and Generate Plots
+            plot_progress = st.progress(0, text="Generating plots...")
+            
+            for i, pressure in enumerate(unique_pressures):
+                df_pressure = df[df['Suction Pressure barg'] == pressure].copy()
+                df_sorted_pressure = df_pressure.sort_values(by='Qr2').reset_index(drop=True)
+                
+                # Plot Set 1: Process Curve
+                process_name, process_buffer = plot_qr2_vs_discharge_pressure_by_temp(df_pressure, df_sorted_pressure, pressure)
+                all_plot_data.append((process_name, process_buffer))
+                
+                # Plot Set 2: Performance Map
+                performance_name, performance_buffer = plot_superimposed_map_triple_axis(df_pressure, df_sorted_pressure, rated_power, pressure)
+                all_plot_data.append((performance_name, performance_buffer))
+                
+                # Update progress
+                plot_progress.progress((i + 1) / len(unique_pressures), text=f"Generated plots for P: {pressure} barg")
+
+            plot_progress.empty() # Clear the progress bar after completion
+            st.success("All plots generated successfully!")
+            
+            # 2. Embed all plots
+            for plot_name, plot_buffer in all_plot_data:
+                worksheet = workbook.add_worksheet(plot_name.replace('.png', '').replace('Process_', 'Curve_')) # Max 31 chars
+                # Insert the plot from the in-memory buffer
+                worksheet.insert_image('A1', plot_name, {
+                    'image_data': plot_buffer, 
+                    'x_scale': 0.7, 
+                    'y_scale': 0.7
+                })
+                
+            writer.close()
+            excel_buffer.seek(0)
+            
+            # --- Streamlit Download Button ---
+            output_filename = f'Compressor_Performance_Output_{os.path.splitext(uploaded_file.name)[0]}.xlsx'
+            st.subheader("4. Download Results")
+            st.download_button(
+                label="⬇️ Download Analysis Excel File",
+                data=excel_buffer,
+                file_name=output_filename,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Click to download the Excel file containing the raw data and all embedded plots."
+            )
+            
+    except Exception as e:
+        st.error(f"An unexpected error occurred during Excel processing or plotting: {e}")
+
+
+# --- Execute the Streamlit app ---
+if __name__ == '__main__':
+    execute_plotting_and_excel_embedding()
