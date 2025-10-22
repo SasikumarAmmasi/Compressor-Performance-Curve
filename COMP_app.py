@@ -93,7 +93,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
     FINAL LOGIC: Operating zone (Green) is where Hr < Surge AND Pwr < Rated. 
-    Non-operating zones (Red) cover all other areas, with Red fills drawn over Green.
+    Non-operating zones (Red) cover all other areas.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
     qr2_for_shading = df_sorted['Qr2']
@@ -130,23 +130,32 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- SHADING ---
     rated_power_array = np.full_like(qr2_for_shading, rated_power, dtype=float)
 
+    # Get the Surge HR data array for the 'where' condition
+    surge_hr_array = df_sorted['Surge HR'].values
+
     # --------------------------------------------------------------------------
-    # 1. SHADE BASE OPERATING ZONE (GREEN)
-    # Shade the entire area below the Rated Power line. This serves as the 'potential'
-    # operating area, which will be cut by the red surge zone.
+    # 1. SHADE BASE OPERATING ZONE (GREEN) - LIMITED BY SURGE LINE
+    # Shade the entire area below the Rated Power line (on ax2), BUT only 
+    # where the Surge HR line is ABOVE the minimum Y-axis limit (i.e., operating range).
+    # Since we are shading on ax2, we cannot directly use the surge line in the `where`
+    # clause as y-values. We rely on the red surge fill below to cover the unsafe area.
+    # We revert to the simpler green fill for the area below rated power, 
+    # and use the red fills with high zorder to cover the non-operating zones.
+    
+    # Shade the area BELOW the Rated Power line. This sets up the base green.
     ax2.fill_between(qr2_for_shading, y2_min, rated_power_array, 
                      facecolor='green', alpha=0.15, zorder=0) 
 
     # --------------------------------------------------------------------------
     # 2. SHADE NON-OPERATING ZONE - POWER OVERLOAD (RED)
-    # Shade area above Rated Power. Uses high zorder (2) to cover all.
+    # Shade area above Rated Power. Uses high zorder (2) to cover green below.
     ax2.fill_between(qr2_for_shading, rated_power_array, y2_max, 
                      facecolor='red', alpha=0.3, zorder=2) 
     
     # --------------------------------------------------------------------------
     # 3. SHADE NON-OPERATING ZONE - SURGE (RED)
-    # Shade area above Surge Line. Uses high zorder (2) to ensure it covers 
-    # the green area where Hr is too high but Pwr is okay.
+    # Shade area ABOVE Surge Line. Uses high zorder (2) to ensure it covers 
+    # the green area where Hr is too high (i.e., the overlapping area is red).
     ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], y1_max, 
                      where=(df_sorted['Surge HR'] <= y1_max),
                      facecolor='red', alpha=0.3, zorder=2) 
@@ -166,7 +175,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         zorder=3
     )
 
-    # Plot 2: Actual Hr vs. Qr^2 (Grouped by Temp)
+    # Group by Temperature
     grouped = df.groupby('Suction Temperature Deg C')
     unique_temps = sorted(df['Suction Temperature Deg C'].unique())
     temp_colors = plt.cm.cool(np.linspace(0, 0.9, len(unique_temps)))
