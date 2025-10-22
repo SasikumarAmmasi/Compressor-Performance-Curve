@@ -92,8 +92,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     """
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
-    MODIFIED: Green shading is below Surge Hr (Operating Zone). Red shading is above Rated Power (Overload Zone).
-    FIXED: The Power Overload fill_between call is corrected to match array sizes.
+    MODIFIED: Red Power Overload Zone is given a higher zorder to overlay the Green Hr Operating Zone.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -146,8 +145,8 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # --------------------------------------------------------------------------
     # --- SHADING: Hr Operating Zone (on ax1) ---
+    # Draw this first with a lower zorder (zorder=0)
     qr2_for_shading = df_sorted['Qr2']
-    # Fills the area between the Surge HR line and the calculated bottom of the Hr axis (y1_min).
     ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], y1_min, 
                      where=(df_sorted['Surge HR'] >= y1_min),
                      facecolor='green', alpha=0.15, zorder=0) 
@@ -197,18 +196,18 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # --------------------------------------------------------------------------
     # --- SHADING: Power Overload Zone (on ax2) ---
-    # Create an array of rated_power to match the x-size (Fixes the where size error)
+    # Draw this second with a higher zorder (zorder=2) to guarantee overlap
     rated_power_array = np.full_like(qr2_for_shading, rated_power, dtype=float)
     
-    # Fills the area between the Rated Power array and the top limit of the Power axis (y2_max).
+    # Fills the area above the Rated Power array up to y2_max.
     ax2.fill_between(qr2_for_shading, rated_power_array, y2_max, 
-                     # Condition: Only shade where the rated power is below the max axis limit (always true here)
-                     facecolor='red', alpha=0.15, zorder=1) 
+                     facecolor='red', alpha=0.15, zorder=2) # Higher zorder ensures it overlaps ax1's green shading
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
     ax3 = ax1.twiny()
     
+    # Ensure axes limits are set and ready before drawing ticks
     fig.canvas.draw()
     major_qr2_ticks = ax1.get_xticks()
 
@@ -268,7 +267,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT
+# STREAMLIT MAIN EXECUTION SCRIPT (REMAINS UNTOUCHED)
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
@@ -316,7 +315,6 @@ def execute_plotting_and_excel_embedding():
 
     # Data Cleaning and Validation
     # NOTE: 'Actual Gas Flow (AMCH)' must be present in the original Excel file!
-    # This line ensures compatibility if the user's header is slightly different
     df.rename(columns={'Actual Gas Flow (AMCH)': 'Actual Gas Flow (Am3/hr)'}, inplace=True)
 
     required_columns = [
