@@ -87,13 +87,13 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     return plot_filename, plot_buffer
 
 
-# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR GREEN-ONLY SHADING
+# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR SHADING
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
-    MODIFIED: Only green shading is applied below the Surge HR line and below the Rated Power line.
-    The yellow/red forbidden zones are removed.
+    MODIFIED: Only green shading is applied below the Surge HR line on ax1.
+    The Rated Power line acts as a visual boundary but does not have dedicated fill_between shading.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -135,15 +135,17 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         actual_hr_handles.append(line)
 
     # --------------------------------------------------------------------------
-    # --- MODIFIED SHADING FOR OPERATING ZONE (ONLY GREEN) ---
+    # --- MODIFIED SHADING: ONLY BELOW SURGE HR (on ax1) ---
     # --------------------------------------------------------------------------
     qr2_for_shading = df_sorted['Qr2']
 
     # 1. Hr Operating Zone (Below Surge HR - Red Line)
     # Fills the area between the Surge HR line and the bottom of the Hr axis (ax1).
     ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], ax1.get_ylim()[0],
-                     where=(df_sorted['Surge HR'] >= ax1.get_ylim()[0]),
-                     facecolor='green', alpha=0.15, zorder=0) 
+                     where=(df_sorted['Surge HR'] >= ax1.get_ylim()[0]), # Ensure fill only below line
+                     facecolor='green', alpha=0.15, zorder=0, label='Hr Operating Zone') 
+    # The `label` here is temporary for internal Matplotlib handling; we'll use a `Patch` for the final legend.
+    # --------------------------------------------------------------------------
     
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
     ax2 = ax1.twinx()
@@ -167,7 +169,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         )
         power_handles.append(line)
 
-    # Plot 4: Rated Power Line
+    # Plot 4: Rated Power Line (NO SHADING directly from this line)
     rated_power_line, = ax2.plot(
         df_sorted['Qr2'],
         [rated_power] * len(df_sorted),
@@ -177,12 +179,11 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         label=f'Rated Power ({rated_power} kW)'
     )
 
-    # 2. Power Operating Zone (Below Rated Power - Black Dotted Line)
-    # Fills the area between the Rated Power line and the bottom of the Power axis (ax2).
-    # This creates a second layer of green shading, visually enforcing the power limit.
-    ax2.fill_between(qr2_for_shading, [rated_power] * len(df_sorted), ax2.get_ylim()[0],
-                     where=([rated_power] * len(df_sorted) >= ax2.get_ylim()[0]),
-                     facecolor='green', alpha=0.15, zorder=0) 
+    # --------------------------------------------------------------------------
+    # --- REMOVED: Power Operating Zone shading (fill_between on ax2) ---
+    # This ensures no green shading appears between the red surge line and the black rated power line,
+    # as the power line is no longer directly dictating a fill_between area.
+    # The Rated Power line now serves purely as a visual boundary for the power curves.
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
@@ -212,16 +213,16 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
     # IMPORTANT: Use one proxy artist for the green shading in the legend
-    operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Operating Zone')
+    hr_operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Hr Operating Zone')
 
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
-    power_legend_handles = [rated_power_line] + power_handles
+    power_legend_handles = [rated_power_line] + power_handles # Rated power line is still a handle
 
-    all_handles = hr_legend_handles + power_legend_handles + [operating_zone_patch]
+    all_handles = hr_legend_handles + power_legend_handles + [hr_operating_zone_patch]
     all_labels = [h.get_label() for h in hr_legend_handles] + \
                  [h.get_label() for h in power_legend_handles] + \
-                 [operating_zone_patch.get_label()]
+                 [hr_operating_zone_patch.get_label()]
 
 
     # Use bbox_to_anchor for fine positioning
@@ -245,7 +246,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT
+# STREAMLIT MAIN EXECUTION SCRIPT (REMAINS UNTOUCHED)
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
@@ -293,7 +294,6 @@ def execute_plotting_and_excel_embedding():
 
     # Data Cleaning and Validation
     # NOTE: 'Actual Gas Flow (AMCH)' must be present in the original Excel file!
-    # This line ensures compatibility if the user's header is slightly different
     df.rename(columns={'Actual Gas Flow (AMCH)': 'Actual Gas Flow (Am3/hr)'}, inplace=True)
 
     required_columns = [
