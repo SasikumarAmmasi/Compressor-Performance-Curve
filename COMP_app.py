@@ -92,8 +92,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     """
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
     and Actual Gas Flow (Secondary X).
-    MODIFIED: Only green shading is applied below the Surge HR line on ax1.
-    The Rated Power line acts as a visual boundary but does not have dedicated fill_between shading.
+    MODIFIED: Green shading is below Surge Hr (Operating Zone). Red shading is above Rated Power (Overload Zone).
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -102,6 +101,16 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.set_ylabel(r'Reduced Head ($\mathbf{Hr}$)', fontsize=14, color='b')
     ax1.tick_params(axis='y', labelcolor='b')
     ax1.grid(True, linestyle='--', alpha=0.6)
+
+    # Calculate Y1 (Hr) limits
+    min_hr = min(df_sorted['Surge HR'].min(), df['Actual Hr'].min())
+    max_hr = df['Actual Hr'].max()
+    hr_range = max_hr - min_hr
+    
+    # Set explicit Y1 limits with a 5% buffer
+    y1_min = max(0, min_hr - hr_range * 0.05)
+    y1_max = max_hr + hr_range * 0.05
+    ax1.set_ylim(y1_min, y1_max)
 
     # Plot 1: Surge HR vs. Qr^2 (plain curve)
     surge_line, = ax1.plot(
@@ -135,22 +144,28 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         actual_hr_handles.append(line)
 
     # --------------------------------------------------------------------------
-    # --- MODIFIED SHADING: ONLY BELOW SURGE HR (on ax1) ---
-    # --------------------------------------------------------------------------
+    # --- RESTORED SHADING: Hr Operating Zone (on ax1) ---
+    # Fills the area between the Surge HR line and the calculated bottom of the Hr axis (y1_min).
     qr2_for_shading = df_sorted['Qr2']
-
-    # 1. Hr Operating Zone (Below Surge HR - Red Line)
-    # Fills the area between the Surge HR line and the bottom of the Hr axis (ax1).
-    ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], ax1.get_ylim()[0],
-                     where=(df_sorted['Surge HR'] >= ax1.get_ylim()[0]), # Ensure fill only below line
-                     facecolor='green', alpha=0.15, zorder=0, label='Hr Operating Zone') 
-    # The `label` here is temporary for internal Matplotlib handling; we'll use a `Patch` for the final legend.
+    ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], y1_min, 
+                     where=(df_sorted['Surge HR'] >= y1_min),
+                     facecolor='green', alpha=0.15, zorder=0) # Removed label for legend handling
     # --------------------------------------------------------------------------
     
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
     ax2 = ax1.twinx()
     ax2.set_ylabel('Power (kW)', fontsize=14, color='g')
     ax2.tick_params(axis='y', labelcolor='g')
+
+    # Calculate Y2 (Power) limits
+    min_power = df['Power (kW)'].min()
+    max_power = max(df['Power (kW)'].max(), rated_power) # Ensure rated power is within the max
+    power_range = max_power - min_power
+    
+    # Set explicit Y2 limits with a 5% buffer
+    y2_min = max(0, min_power - power_range * 0.05)
+    y2_max = max_power + power_range * 0.05
+    ax2.set_ylim(y2_min, y2_max)
 
     power_handles = []
 
@@ -169,7 +184,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         )
         power_handles.append(line)
 
-    # Plot 4: Rated Power Line (NO SHADING directly from this line)
+    # Plot 4: Rated Power Line
     rated_power_line, = ax2.plot(
         df_sorted['Qr2'],
         [rated_power] * len(df_sorted),
@@ -180,10 +195,11 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     )
 
     # --------------------------------------------------------------------------
-    # --- REMOVED: Power Operating Zone shading (fill_between on ax2) ---
-    # This ensures no green shading appears between the red surge line and the black rated power line,
-    # as the power line is no longer directly dictating a fill_between area.
-    # The Rated Power line now serves purely as a visual boundary for the power curves.
+    # --- NEW SHADING: Power Overload Zone (on ax2) ---
+    # Fills the area between the Rated Power line and the top limit of the Power axis (y2_max).
+    ax2.fill_between(qr2_for_shading, rated_power, y2_max, 
+                     where=(rated_power <= y2_max), 
+                     facecolor='red', alpha=0.15, zorder=1) # Red for Overload
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
@@ -212,17 +228,19 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- Legend Construction ---
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
-    # IMPORTANT: Use one proxy artist for the green shading in the legend
+    # Proxy artists for the shading zones
     hr_operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Hr Operating Zone')
+    power_overload_zone_patch = Patch(facecolor='red', alpha=0.15, label='Power Overload Zone')
 
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
-    power_legend_handles = [rated_power_line] + power_handles # Rated power line is still a handle
+    power_legend_handles = [rated_power_line] + power_handles
 
-    all_handles = hr_legend_handles + power_legend_handles + [hr_operating_zone_patch]
+    # All handles: Hr Lines, Power Lines, Hr Zone, Power Zone
+    all_handles = hr_legend_handles + power_legend_handles + [hr_operating_zone_patch, power_overload_zone_patch]
     all_labels = [h.get_label() for h in hr_legend_handles] + \
                  [h.get_label() for h in power_legend_handles] + \
-                 [hr_operating_zone_patch.get_label()]
+                 [hr_operating_zone_patch.get_label(), power_overload_zone_patch.get_label()]
 
 
     # Use bbox_to_anchor for fine positioning
