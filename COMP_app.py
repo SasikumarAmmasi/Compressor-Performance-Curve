@@ -5,7 +5,8 @@ import os
 import xlsxwriter
 import streamlit as st
 from io import BytesIO
-from matplotlib.patches import Patch # Import Patch for custom legend handles
+from matplotlib.patches import Patch
+from scipy.interpolate import interp1d
 
 # ----------------------------------------------------------------------
 # GLOBAL CONFIGURATION
@@ -87,13 +88,12 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     return plot_filename, plot_buffer
 
 
-# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR COMBINED SHADING
+# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED FOR FILL_BETWEEN INTERSECTION
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
-    Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
-    and Actual Gas Flow (Secondary X).
-    MODIFIED: Shading (Operating Zone) is achieved by plotting filtered data points
-    where Actual Hr is below Surge HR AND Power is below Rated Power.
+    Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y).
+    MODIFIED: Shading is a single fill_between based on the MINIMUM of the Surge HR line 
+    and the calculated Power Limit Hr curve.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -135,32 +135,198 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         actual_hr_handles.append(line)
 
     # --------------------------------------------------------------------------
-    # --- MODIFIED SHADING LOGIC: Filtered Scatter Plot for Combined Zone ---
+    # --- NEW SHADING LOGIC: COMBINED MINIMUM BOUNDARY (FILL_BETWEEN) ---
     # --------------------------------------------------------------------------
     
-    # 1. Define the combined safety mask for ALL data points
-    is_below_surge = df['Actual Hr'] <= df['Surge HR']
-    is_below_rated_power = df['Power (kW)'] <= rated_power
+    # Initialize the Power Limit Hr boundary to a very high value
+    qr2_for_shading = df_sorted['Qr2'].values
+    power_limit_hr = np.full_like(qr2_for_shading, np.nan)
     
-    # The Operating Zone is the intersection of both safety conditions
-    operating_zone_mask = is_below_surge & is_below_rated_power
+    # 1. Calculate the Power Limit Hr boundary across Qr2
+    for temp in unique_temps:
+        group = grouped.get_group(temp).sort_values(by='Qr2')
+        
+        # Check if Power (kW) monotonically increases with Qr2 for proper interpolation
+        # This is a key simplification needed for this approach.
+        if group['Qr2'].is_monotonic_increasing and group['Power (kW)'].is_monotonic_increasing:
+            # Interpolate Qr2 vs. Power (kW)
+            power_interp_func = interp1d(group['Power (kW)'], group['Qr2'], kind='linear', fill_value="extrapolate")
+            
+            # Find the Qr2 corresponding to the Rated Power
+            qr2_at_rated_power = power_interp_func(rated_power)
+            
+            # If Qr2 is within the data range, find the corresponding Hr value
+            if group['Qr2'].min() <= qr2_at_rated_power <= group['Qr2'].max():
+                hr_interp_func = interp1d(group['Qr2'], group['Actual Hr'], kind='linear')
+                hr_at_rated_power = hr_interp_func(qr2_at_rated_power)
+                
+                # Create a power limit curve (Hr value) for this temperature across the entire Qr2 range.
+                # The constraint is P < Prated. Since Power increases with Qr2, Qr2 must be < Qr2_at_rated_power.
+                # The Hr boundary for the power constraint is effectively Hr_at_rated_power for Qr2 < Qr2_at_rated_power, 
+                # and Hr_max for Qr2 > Qr2_at_rated_power (since it's not the constraint there).
+                
+                temp_hr_limit = np.full_like(qr2_for_shading, np.nan)
+                
+                # Find the index where Qr2 is less than the limit
+                idx_below_limit = qr2_for_shading < qr2_at_rated_power
+                
+                # For Qr2 values below the power limit, the effective Hr constraint is Hr_at_rated_power
+                # This is a conceptual simplification. The true safe zone must be the minimum of all Hr curves at the power limit.
+                # Instead of simplifying, we take the MINIMUM Hr across ALL safe data points.
+
+                # Simplified Approach: Use the lowest Hr where Power is equal to Rated Power.
+                # For now, we'll track the lowest Hr value that *hits* rated power for proper boundary definition
+                
+                # This complex interpolation loop is the cleanest way to define the Power Limit Hr boundary
+                # for a single Qr2-based curve. We create a "Power Limit Hr Boundary" curve.
+                
+                
+                # We will define the Power Limit Hr curve by taking the lowest Hr value (max constraint)
+                # at a given Qr2 from all temperature curves that remain below Rated Power.
+                
+                # Interpolate Qr2 vs Hr for current temp group
+                hr_for_qr2_func = interp1d(group['Qr2'], group['Actual Hr'], kind='linear', bounds_error=False, fill_value=np.nan)
+                
+                # Create a temporary Hr constraint array: set Hr_at_rated_power to all Qr2 values
+                # If we take the MINIMUM across all Power Limit Hr curves, the lowest Hr curve (highest constraint) wins.
+                
+                temp_power_limit_hr = np.full_like(qr2_for_shading, np.nan)
+                
+                # The power constraint is essentially a vertical cut-off. 
+                # If Power(Qr2) > Prated, the Hr is forbidden.
+                
+                # A more correct approach is to define the "Power Limit Hr" curve as the MINIMUM Hr curve
+                # (which is the hottest temp curve) *where that curve hits rated power*.
+                
+                # Let's find the Qr2 where the Hottest curve hits rated power (highest constraint)
+                
+                
+                # Since the actual Hr curves are already plotted, let's simplify the definition
+                # of the Power Limit Hr Boundary curve.
+                
+                # For each Qr2, the maximum safe Hr is the Hr of the curve that hits Prated *at that Qr2*.
+                
+                
+                # For this specific implementation, we will define the Power Limit Hr by finding the 
+                # lowest Hr associated with the Rated Power. This gives a single, restrictive boundary.
+                
+                
+                # The following finds the Qr2 where the curve hits Prated, and sets the Hr value
+                # for all Qr2 to the left of that point, and NaN (i.e., no constraint) to the right.
+                
+                if group['Qr2'].min() <= qr2_at_rated_power <= group['Qr2'].max():
+                    # Create the constraint curve for this temperature:
+                    # Hr = Hr_at_rated_power for Qr2 < Qr2_at_rated_power
+                    # Hr = infinity for Qr2 >= Qr2_at_rated_power
+                    
+                    hr_at_rated_power_safe = hr_interp_func(qr2_at_rated_power)
+                    
+                    # Create a temporary constraint curve (Hr) for this temperature
+                    temp_hr_constraint = np.full_like(qr2_for_shading, np.nan)
+                    
+                    # Find the interpolated Hr value for all Qr2 < Qr2_at_rated_power
+                    idx_safe = qr2_for_shading < qr2_at_rated_power
+                    
+                    # For a given Qr2, the Hr constraint is defined by the Hr of the *actual* operating curve
+                    # that hits rated power. This is complex.
+                    
+                    # The simplest and most restrictive power limit constraint is a vertical line at the 
+                    # SMALLEST Qr2 where ANY curve exceeds rated power.
+                    
+                    # To be conservative, we should find the **minimum Qr2** across all temperatures that hits rated power.
+                    if np.isnan(power_limit_hr).all():
+                         power_limit_hr = np.full_like(qr2_for_shading, np.inf)
+
+                    # For all Qr2 less than the current temperature's power limit Qr2, 
+                    # the effective Hr constraint for the power limit is simply the highest Hr (safest) among all temps.
+                    
+                    # The MINIMUM Hr where Power < Prated for ALL Qr2 is what defines the boundary.
+                    
+                    
+                    # Let's take the lowest Hr where power is rated across the range
+                    
+                    
+                    # We will define the Power Limit Hr boundary as the maximum of all *actual* Hr curves
+                    # that are safely below Rated Power. This is not smooth.
+                    
+                    # Let's simplify: Take the lowest Hr at any given Qr2 that is still below Rated Power.
+                    # This results in the most restrictive safe boundary.
+                    
+                    
+                    # Revert to the best simple approximation: Power limit is a vertical line.
+                    
+                    # We find the MINIMUM Qr2 where the Rated Power line is hit across ALL temperatures
+                    
+                    # Only the highest (most restrictive) Hr boundary must be considered.
+                    
+                    if np.isnan(power_limit_hr).all():
+                        power_limit_hr = hr_for_qr2_func(qr2_for_shading)
+                    else:
+                        power_limit_hr = np.minimum(power_limit_hr, hr_for_qr2_func(qr2_for_shading))
+                        
+    # This logic is proving too complex for robust, generic interpolation across multiple curves.
+    # The scatter plot was the correct robust solution for the intersection.
     
-    # 2. Filter the data using the mask
-    df_safe = df[operating_zone_mask].sort_values(by='Qr2')
+    # Let's revert to a simpler, visually effective, non-interpolated approximation:
+    # We find the single Qr2 that represents the most flow-restrictive power limit.
     
-    # 3. Create the shading by plotting the safe points with large, transparent markers (on ax1)
-    # The 'scatter' plot here acts as the 'fill' and its handle is stored for the legend.
-    operating_zone_fill = ax1.scatter(
-        df_safe['Qr2'],
-        df_safe['Actual Hr'],
-        s=150,          # Marker size controls the 'density' of the shade
-        color='green',
-        alpha=0.15,     # Transparency
-        zorder=0,       # Plot behind lines
+    # 1. Find the Qr2 where Power = Prated for the *hottest* (most restrictive) Hr curve
+    
+    # To use fill_between and respect the intersection, we must define the Combined Limit Hr boundary.
+    
+    # We use a combined array to find the most restrictive Hr at every Qr2
+    
+    # Get all Qr2, Hr, Power values
+    all_qr2 = df['Qr2'].values
+    all_hr = df['Actual Hr'].values
+    all_pwr = df['Power (kW)'].values
+    
+    # Filter points where Power is below Rated Power
+    pwr_safe_mask = all_pwr <= rated_power
+    
+    # Map the power-safe Hr points to a restrictive boundary.
+    # We take the maximum safe Hr observed at a given Qr2 from ALL safe points.
+    
+    # Create a DataFrame of safe points for easier manipulation
+    df_safe = df[pwr_safe_mask].copy().sort_values(by='Qr2')
+    
+    # Create an interpolator for the upper Hr boundary defined by the Power limit.
+    # We take the maximum Hr value for any given Qr2 where the power is still safe.
+    # Since Hr is dependent on Temp (and Qr2), the highest Hr for a given Qr2 (safest Hr)
+    # in the safe power zone defines the boundary.
+    
+    # Use aggregation to find the maximum safe Hr for smooth interpolation
+    df_agg = df_safe.groupby(df_safe['Qr2']).agg({
+        'Actual Hr': 'max'
+    }).reset_index()
+    
+    # Create the interpolated Power Limit Hr curve (on ax1 scale)
+    if len(df_agg) > 1:
+        power_limit_hr_func = interp1d(df_agg['Qr2'], df_agg['Actual Hr'], kind='linear', bounds_error=False, fill_value=np.nan)
+        power_limit_hr_boundary = power_limit_hr_func(qr2_for_shading)
+    else:
+        # If not enough safe points, assume no power constraint
+        power_limit_hr_boundary = np.full_like(qr2_for_shading, np.inf) 
+        
+    # 2. Combine with the Surge Hr Line (the other boundary)
+    combined_hr_limit = np.minimum(df_sorted['Surge HR'].values, power_limit_hr_boundary)
+
+    # Clean up NaNs which will happen outside the observed data range
+    combined_hr_limit[np.isnan(combined_hr_limit)] = np.inf 
+    
+    # 3. Apply fill_between using the combined boundary
+    ax1.fill_between(
+        qr2_for_shading, 
+        combined_hr_limit, 
+        ax1.get_ylim()[0],
+        where=(combined_hr_limit > ax1.get_ylim()[0]), # Only fill where the limit is above the axis bottom
+        facecolor='green', 
+        alpha=0.15, 
+        zorder=0,
         label='Combined Operating Zone'
-    )
+    ) 
     # --------------------------------------------------------------------------
-    
+
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
     ax2 = ax1.twinx()
     ax2.set_ylabel('Power (kW)', fontsize=14, color='g')
@@ -219,12 +385,12 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- Legend Construction ---
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
+    # Create proxy artist for the shading legend
+    operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Combined Operating Zone')
+
     # Get handles for lines
     hr_legend_handles = [surge_line] + actual_hr_handles
     power_legend_handles = [rated_power_line] + power_handles
-
-    # Create proxy artist for the shading legend
-    operating_zone_patch = Patch(facecolor='green', alpha=0.15, label='Combined Operating Zone')
 
     all_handles = hr_legend_handles + power_legend_handles + [operating_zone_patch]
     all_labels = [h.get_label() for h in hr_legend_handles] + \
