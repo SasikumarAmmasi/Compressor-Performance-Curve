@@ -136,6 +136,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # --------------------------------------------------------------------------
     # --- MODIFIED SHADING: ONLY BELOW SURGE HR (on ax1) ---
+    # This logic ensures shading does NOT extend up to the Rated Power line.
     # --------------------------------------------------------------------------
     qr2_for_shading = df_sorted['Qr2']
 
@@ -144,7 +145,6 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.fill_between(qr2_for_shading, df_sorted['Surge HR'], ax1.get_ylim()[0],
                      where=(df_sorted['Surge HR'] >= ax1.get_ylim()[0]), # Ensure fill only below line
                      facecolor='green', alpha=0.15, zorder=0, label='Hr Operating Zone') 
-    # The `label` here is temporary for internal Matplotlib handling; we'll use a `Patch` for the final legend.
     # --------------------------------------------------------------------------
     
     # --- B. SECONDARY Y-AXIS (ax2, Right): Power (kW) ---
@@ -181,9 +181,8 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # --------------------------------------------------------------------------
     # --- REMOVED: Power Operating Zone shading (fill_between on ax2) ---
-    # This ensures no green shading appears between the red surge line and the black rated power line,
-    # as the power line is no longer directly dictating a fill_between area.
-    # The Rated Power line now serves purely as a visual boundary for the power curves.
+    # This removal is key to fulfilling the request to remove shade between the
+    # rated power line (ax2) and the surge line (ax1).
     # --------------------------------------------------------------------------
 
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
