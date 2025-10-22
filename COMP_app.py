@@ -13,7 +13,7 @@ TEMP_DIR = 'temp_plots'
 
 
 # ----------------------------------------------------------------------
-# PLOTTING FUNCTIONS (PLOT 1 MODIFIED)
+# PLOTTING FUNCTIONS (PLOT 1 REMAINS SAME)
 # ----------------------------------------------------------------------
 
 # PLOT 1: Qr2 vs. Discharge Pressure (Grouped by Suction Temperature)
@@ -38,7 +38,6 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
         ax1.plot(
             group['Qr2'],
             group['Discharge Pressure barg'],
-            # REMOVED: marker='o' -> making it a plain curve
             linestyle='-',
             color=colors[i],
             label=f'{temp}°C'
@@ -47,21 +46,20 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     # --- B. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
     ax3 = ax1.twiny()
 
-    # Use the pre-sorted df_sorted for axis alignment
-    n_labels = 6
-    flow_indices = np.linspace(0, len(df_sorted) - 1, n_labels).astype(int)
-    
-    # Ensure the column name used here matches the main function rename
+    # Use all data points for secondary axis alignment
     flow_col = 'Actual Gas Flow (Am3/hr)'
     
-    flow_labels_qr2 = df_sorted['Qr2'].iloc[flow_indices].values
-    flow_labels_amch = df_sorted[flow_col].iloc[flow_indices].values.astype(int)
+    # Use all Qr2 values for tick positions
+    flow_labels_qr2 = df_sorted['Qr2'].values
+    # Use all Actual Gas Flow values for tick labels
+    flow_labels_amch = df_sorted[flow_col].values.astype(int)
 
+    # Set custom tick locations and labels based on the data points
     ax3.set_xticks(flow_labels_qr2)
     ax3.set_xticklabels(flow_labels_amch)
 
     ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange')
-    ax3.tick_params(axis='x', labelcolor='darkorange')
+    ax3.tick_params(axis='x', labelcolor='darkorange', rotation=45, labelsize=10) # Added rotation for density
     ax3.set_xlim(ax1.get_xlim()) # Ensure the top axis limits match the bottom axis
 
     ax1.set_title(f'Process Curve - Suction Pressure: {pressure_value} barg', fontsize=18)
@@ -79,11 +77,12 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     return plot_filename, plot_buffer
 
 
-# PLOT 2: Complex Superimposed Map (Triple-Axis)
+# PLOT 2: Complex Superimposed Map (Triple-Axis) - MODIFIED
 def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value):
     """
     Generates the final superimposed plot with Hr (Primary Y), Power (Secondary Y),
-    and Actual Gas Flow (Secondary X). (NO CHANGE)
+    and Actual Gas Flow (Secondary X).
+    MODIFIED: Removed all markers and synchronized secondary X-axis with primary X-axis points.
     """
     fig, ax1 = plt.subplots(figsize=(14, 8))
 
@@ -93,11 +92,12 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.tick_params(axis='y', labelcolor='b')
     ax1.grid(True, linestyle='--', alpha=0.6)
 
-    # Plot 1: Surge HR vs. Qr2 (Uses the pre-sorted df_sorted)
+    # Plot 1: Surge HR vs. Qr2 
     surge_line, = ax1.plot(
         df_sorted['Qr2'],
         df_sorted['Surge HR'],
-        marker='s',
+        # CHANGE 1: Marker removed (was 's')
+        marker=None, 
         linestyle='-',
         color='red',
         linewidth=3.0,
@@ -116,11 +116,12 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         line, = ax1.plot(
             group['Qr2'],
             group['Actual Hr'],
-            marker='o',
+            # CHANGE 2: Marker removed (was 'o')
+            marker=None,
             linestyle='-',
             color=temp_colors[i],
             linewidth=1.5,
-            markersize=5,
+            # markersize=5, # Removed as marker=None
             label=f'Hr @ {temp}°C'
         )
         actual_hr_handles.append(line)
@@ -138,17 +139,18 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         line, = ax2.plot(
             group['Qr2'],
             group['Power (kW)'],
-            marker='^',
+            # CHANGE 3: Marker removed (was '^')
+            marker=None,
             linestyle='--',
             color=temp_colors[i],
             linewidth=1.5,
-            markersize=5,
+            # markersize=5, # Removed as marker=None
             alpha=0.6,
             label=f'Pwr @ {temp}°C'
         )
         power_handles.append(line)
 
-    # Plot 4: Rated Power Line (Uses the rated_power argument)
+    # Plot 4: Rated Power Line (No marker, remains the same)
     rated_power_line, = ax2.plot(
         df_sorted['Qr2'],
         [rated_power] * len(df_sorted),
@@ -161,23 +163,23 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     # --- C. SECONDARY X-AXIS (ax3, Top): Actual Gas Flow ---
     ax3 = ax1.twiny()
 
-    # Use the pre-sorted df_sorted for axis alignment
-    n_labels = 6
-    flow_indices = np.linspace(0, len(df_sorted) - 1, n_labels).astype(int)
-
+    # CHANGE 4: Use ALL data points for perfect 1:1 synchronization (as requested)
     flow_col = 'Actual Gas Flow (Am3/hr)' 
     
-    flow_labels_qr2 = df_sorted['Qr2'].iloc[flow_indices].values
-    flow_labels_amch = df_sorted[flow_col].iloc[flow_indices].values.astype(int)
+    # Use all Qr2 values for tick positions (these are the primary X-axis points)
+    flow_labels_qr2 = df_sorted['Qr2'].values
+    # Use all Actual Gas Flow values for tick labels
+    flow_labels_amch = df_sorted[flow_col].values.astype(int)
 
     ax3.set_xticks(flow_labels_qr2)
     ax3.set_xticklabels(flow_labels_amch)
 
     ax3.set_xlabel(r'Actual Gas Flow ($\mathbf{Am^3/hr}$)', fontsize=14, color='darkorange')
-    ax3.tick_params(axis='x', labelcolor='darkorange')
+    # Added rotation for tick labels since they might overlap if there are many points
+    ax3.tick_params(axis='x', labelcolor='darkorange', rotation=45, labelsize=10) 
     ax3.set_xlim(ax1.get_xlim())
 
-    # --- Legend Construction (Offset to prevent overlap) ---
+    # --- Legend Construction ---
     ax1.set_title(f'Compressor Performance Map - Suction Pressure: {pressure_value} barg', fontsize=18)
 
     # Combine all handles and labels for a single legend
@@ -208,7 +210,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     return plot_filename, plot_buffer
 
 # ----------------------------------------------------------------------
-# STREAMLIT MAIN EXECUTION SCRIPT
+# STREAMLIT MAIN EXECUTION SCRIPT (No change needed here)
 # ----------------------------------------------------------------------
 
 def execute_plotting_and_excel_embedding():
@@ -294,11 +296,11 @@ def execute_plotting_and_excel_embedding():
                 df_pressure = df[df['Suction Pressure barg'] == pressure].copy()
                 df_sorted_pressure = df_pressure.sort_values(by='Qr2').reset_index(drop=True)
                 
-                # Plot Set 1: Process Curve (MODIFIED function is called)
+                # Plot Set 1: Process Curve
                 process_name, process_buffer = plot_qr2_vs_discharge_pressure_by_temp(df_pressure, df_sorted_pressure, pressure)
                 all_plot_data.append((process_name, process_buffer))
                 
-                # Plot Set 2: Performance Map
+                # Plot Set 2: Performance Map (MODIFIED function is called)
                 performance_name, performance_buffer = plot_superimposed_map_triple_axis(df_pressure, df_sorted_pressure, rated_power, pressure)
                 all_plot_data.append((performance_name, performance_buffer))
                 
