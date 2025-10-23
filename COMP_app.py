@@ -201,7 +201,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
             marker=None,
             linestyle='-',
             color=temp_colors[i],
-            linewidth=1.5,
+            linewidth=2.0,
             label=f'Hr @ {temp}°C',
             zorder=3
         )
@@ -217,8 +217,8 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
             marker=None,
             linestyle='--',
             color=temp_colors[i],
-            linewidth=1.5,
-            alpha=0.6,
+            linewidth=2.0,
+            alpha=0.9,
             label=f'Pwr @ {temp}°C',
             zorder=3
         )
