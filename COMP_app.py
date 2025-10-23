@@ -16,7 +16,7 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
     """
     Generates the plot of Qr2 vs. Discharge Pressure, grouped by Suction Temperature.
     """
-    fig, ax1 = plt.subplots(figsize=(14, 8))
+    fig, ax1 = plt.subplots(figsize=(13.5, 8))
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr^2 (Reduced Flow) ---
     ax1.set_xlabel(r'Reduced Flow ($\mathbf{Qr^2}$)', fontsize=14)
@@ -82,7 +82,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     Operating Zone (Green): ONLY where BOTH (Hr < Surge HR) AND (Power < Rated Power)
     Non-Operating Zone (Red): Anywhere else (above surge OR above rated power)
     """
-    fig, ax1 = plt.subplots(figsize=(14, 12))
+    fig, ax1 = plt.subplots(figsize=(14, 10))
     qr2_for_shading = df_sorted['Qr2']
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr^2 (Reduced Flow) ---
