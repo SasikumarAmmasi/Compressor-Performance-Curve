@@ -263,7 +263,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
 
     # Proxy artists for the shading zones 
     hr_operating_zone_patch = Patch(facecolor='green', alpha=0.2, label='Operating Zone (Below Surge & Below Rated Power)')
-    power_non_operating_zone_patch = Patch(facecolor='red', alpha=0.0, label='Non-Operating Zone (Above Surge OR Above Rated Power)')
+    power_non_operating_zone_patch = Patch(facecolor='red', alpha=0.0) #, label='Non-Operating Zone (Above Surge OR Above Rated Power)')
 
     hr_legend_handles = [surge_line] + actual_hr_handles
     power_legend_handles = [rated_power_line] + power_handles
@@ -276,7 +276,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.legend(all_handles, all_labels,
                title='Curves & Zones (Hr - Left Axis, Power - Right Axis)',
                loc='lower center',
-               bbox_to_anchor=(0.5, -0.2),
+               bbox_to_anchor=(0.5, -1.2),
                ncol=3,
                fontsize=8)
 
