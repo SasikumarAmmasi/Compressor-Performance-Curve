@@ -154,7 +154,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         y1_min, 
         y1_max,
         facecolor='red', 
-        alpha=0.35, 
+        alpha=0.0, 
         zorder=1,
         interpolate=True
     )
@@ -169,7 +169,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
         y1_min, 
         effective_upper_boundary,
         facecolor='green', 
-        alpha=0.5, 
+        alpha=0.35, 
         zorder=2,
         interpolate=True
     )
