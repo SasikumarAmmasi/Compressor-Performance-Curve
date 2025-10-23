@@ -141,60 +141,35 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     effective_upper_boundary = np.minimum(surge_hr_array, rated_power_hr_array)
     
     # --------------------------------------------------------------------------
-    # 1. SHADE OPERATING ZONE (GREEN) 
+    # SHADING STRATEGY: 
+    # 1. First fill EVERYTHING with RED (non-operating zone base)
+    # 2. Then overlay GREEN only where it's safe (operating zone)
+    # --------------------------------------------------------------------------
+    
+    # --------------------------------------------------------------------------
+    # STEP 1: SHADE ENTIRE AREA AS NON-OPERATING ZONE (RED BASE LAYER)
+    # --------------------------------------------------------------------------
+    ax1.fill_between(
+        qr2_for_shading, 
+        y1_min, 
+        y1_max,
+        facecolor='red', 
+        alpha=0.35, 
+        zorder=1,
+        interpolate=True
+    )
+    
+    # --------------------------------------------------------------------------
+    # STEP 2: SHADE OPERATING ZONE (GREEN) - OVERLAY ON TOP
     # Only where BOTH: below surge line AND below rated power line
+    # This will cover the red underneath in the safe operating region
     # --------------------------------------------------------------------------
     ax1.fill_between(
         qr2_for_shading, 
         y1_min, 
         effective_upper_boundary,
         facecolor='green', 
-        alpha=0.25, 
-        zorder=1,
-        interpolate=True
-    )
-    
-    # --------------------------------------------------------------------------
-    # 2. NON-OPERATING ZONE - ABOVE SURGE LINE (RED)
-    # Shade area ABOVE Surge Line
-    # --------------------------------------------------------------------------
-    ax1.fill_between(
-        qr2_for_shading, 
-        surge_hr_array, 
-        y1_max,
-        facecolor='red', 
         alpha=0.35, 
-        zorder=2,
-        interpolate=True
-    )
-    
-    # --------------------------------------------------------------------------
-    # 3. NON-OPERATING ZONE - ABOVE RATED POWER (RED)
-    # Shade area above Rated Power (converted to Hr scale)
-    # --------------------------------------------------------------------------
-    ax1.fill_between(
-        qr2_for_shading, 
-        rated_power_hr_array, 
-        y1_max,
-        facecolor='red', 
-        alpha=0.35, 
-        zorder=2,
-        interpolate=True
-    )
-    
-    # --------------------------------------------------------------------------
-    # 4. NON-OPERATING ZONE - BETWEEN LINES (RED)
-    # Fill the gap between surge and rated power where they don't overlap
-    # --------------------------------------------------------------------------
-    # Where rated power is below surge line (gap exists)
-    gap_condition = rated_power_hr_array < surge_hr_array
-    ax1.fill_between(
-        qr2_for_shading,
-        rated_power_hr_array,
-        surge_hr_array,
-        where=gap_condition,
-        facecolor='red',
-        alpha=0.35,
         zorder=2,
         interpolate=True
     )
