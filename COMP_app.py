@@ -276,7 +276,7 @@ def plot_superimposed_map_triple_axis(df, df_sorted, rated_power, pressure_value
     ax1.legend(all_handles, all_labels,
                title='Curves & Zones (Hr - Left Axis, Power - Right Axis)',
                loc='lower center',
-               bbox_to_anchor=(0.5, -1.2),
+               bbox_to_anchor=(0.5, -0.5),
                ncol=3,
                fontsize=8)
 
