@@ -677,11 +677,4 @@ def execute_plotting_and_excel_embedding():
             5. Check that temperature values are consistent
             """)
 
-# Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; color: #666;'>
-        <p>🗜️ Compressor Performance Analyzer v2.0 | Built with Streamlit</p>
-        <p style='font-size: 0.8em;'>For support or questions, contact your system administrator</p>
-    </div>
-    """, unsafe_allow_html=True)
+
