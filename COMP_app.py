@@ -20,7 +20,7 @@ def plot_qr2_vs_discharge_pressure_by_temp(df, df_sorted, pressure_value):
 
     # --- A. PRIMARY X-AXIS (ax1, Bottom): Qr^2 (Reduced Flow) ---
     ax1.set_xlabel(r'Reduced Flow ($\mathbf{Qr^2}$)', fontsize=14)
-    ax1.set_ylabel('Discharge Pressure ($\mathbf{barg}$)', fontsize=14)
+    ax1.set_ylabel(r'Discharge Pressure ($\mathbf{barg}$)', fontsize=14)
     ax1.grid(True, linestyle='--', alpha=0.7)
 
     grouped = df.groupby('Suction Temperature Deg C')
