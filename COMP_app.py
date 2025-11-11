@@ -684,3 +684,4 @@ def execute_plotting_and_excel_embedding():
         <p>🗜️ Compressor Performance Analyzer v2.0 | Built with Streamlit</p>
         <p style='font-size: 0.8em;'>For support or questions, contact your system administrator</p>
     </div>
+    """, unsafe_allow_html=True)
